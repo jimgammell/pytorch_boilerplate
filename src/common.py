@@ -19,7 +19,7 @@ RESOURCE_DIR = Constant(os.path.join(PROJ_DIR, RESOURCE_DIRNAME))
 OUTPUT_DIRNAME = Constant('outputs')
 OUTPUT_DIR = Constant(os.path.join(PROJ_DIR, OUTPUT_DIRNAME))
 numpy_rng = np.random.default_rng()
-_trial_name = None #'trial__{date:%Y_%m_%d_%H_%M_%S}'.format(date=datetime.datetime.now())
+_trial_name = None
 _verbose = None
 _seed = None
 
@@ -68,6 +68,7 @@ def print(*args, **kwargs):
 
 _seed = set_seed()
 _verbose = set_verbosity()
+set_trial_name('trial__{date:%Y_%m_%d_%H_%M_%S}'.format(date=datetime.datetime.now()))
 os.makedirs(CONFIG_DIR, exist_ok=True)
 os.makedirs(RESOURCE_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
