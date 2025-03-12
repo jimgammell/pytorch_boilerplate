@@ -1,0 +1,39 @@
+from typing import Optional
+
+import torch
+from torch import nn
+
+from .config import TransformerConfig
+from .building_blocks import *
+
+class TransformerLayer(nn.Module):
+    def __init__(self, config: TransformerConfig, layer_num: Optional[int] = None):
+        super().__init__()
+        self.config = config
+        self.layer_num = layer_num
+        self.pre_attn_norm = NormLayer(self.config, self.layer_num)
+        self.attn = AttentionLayer(self.config)
+        self.pre_fnn_norm = NormLayer(self.config, self.layer_num)
+        self.fnn = FeedForwardLayer(self.config)
+    
+    def forward(self, x):
+        x = x + self.attn(self.pre_attn_norm(x))
+        x = x + self.fnn(self.pre_fnn_norm(x))
+        return x
+
+class Transformer(nn.Module):
+    def __init__(self, config: TransformerConfig):
+        super().__init__()
+        self.config = config
+        self.patchifier = Patchifier(self.config)
+        self.transformer_layers = nn.ModuleList([
+            TransformerLayer(self.config, layer_num) for layer_num in range(1, self.config.layer_count+1)
+        ])
+        self.heads = AttentionPoolingLayer(self.config)
+    
+    def forward(self, x):
+        x = self.patchifier(x)
+        for transformer_layer in self.transformer_layers:
+            x = transformer_layer(x)
+        x = self.heads(x)
+        return x
