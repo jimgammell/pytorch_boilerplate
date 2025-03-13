@@ -11,14 +11,17 @@ class NormLayer(nn.Module):
     def __init__(self, config: TransformerConfig, layer_num: Optional[int] = None):
         super().__init__()
         self.config = config
-        self.block_num = layer_num
-        self.weight = nn.Parameter(torch.ones(self.config.embedding_dim))
         if self.config.rescale_norm_outputs:
             assert layer_num is not None
-            self.weight.data /= sqrt(layer_num)
+            self.scale = 1./sqrt(layer_num)
+        else:
+            self.scale = 1.
+        self.weight = nn.Parameter(torch.ones(self.config.embedding_dim))
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return nn.functional.rms_norm(x, self.weight.shape, weight=self.weight, eps=self.config.norm_eps)
+        # I feel like scaling should be equivalent to just initializing self.weight to 1/self.scale instead of 1.
+        #   Just going with this approach though in case I'm missing something.
+        return self.scale*nn.functional.rms_norm(x, self.weight.shape, weight=self.weight, eps=self.config.norm_eps)
 
 class AttentionLayer(nn.Module):
     def __init__(self, config: TransformerConfig):

@@ -1,13 +1,17 @@
-from utils.constant import Constant
-from .lenet import LeNet5
+from typing import Dict, Any
+from enum import Enum
 
-_MODEL_CONSTRUCTORS = Constant({
-    'lenet-5': LeNet5
-})
-AVAILABLE_MODELS = Constant(list(_MODEL_CONSTRUCTORS.keys()))
+from .base_module import BaseModule
 
-def load(name, **kwargs):
-    if not(name in AVAILABLE_MODELS):
-        raise NotImplementedError(f'Unrecognized model name: {name}.')
-    model = _MODEL_CONSTRUCTORS[name](**kwargs)
+class AVAILABLE_MODELS(Enum):
+    TRANSFORMER_FOR_SCA = 'transformer-for-sca'
+
+def load(model_name: AVAILABLE_MODELS, config_kwargs: Dict[str, Any]) -> BaseModule:
+    assert model_name in AVAILABLE_MODELS
+    if model_name == AVAILABLE_MODELS.TRANSFORMER_FOR_SCA:
+        from .transformer_for_sca import Transformer, TransformerConfig
+        config = TransformerConfig(**config_kwargs)
+        model = Transformer(config)
+    else:
+        assert False
     return model

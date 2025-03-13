@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 @dataclass
 class TransformerConfig:
-    patch_size: int = 100
+    patch_size: int = 1000
     layer_count: int = 12
     attn_head_count: int = 12
     embedding_dim: int = 768

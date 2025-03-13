@@ -1,0 +1,10 @@
+gautschi:
+  openwebtext: /scratch/gautschi/jgammell/openwebtext
+  imagenet: null
+  ascadv1: null
+  ascadv2: null
+ee350-csme-precision:
+  openwebtext: /mnt/hdd/datasets/openwebtext
+  imagenet: /mnt/hdd/datasets/imagenet
+  ascadv1: /mnt/hdd/datasets/ascadv1
+  ascadv2: /mnt/hdd/datasets/ascadv2

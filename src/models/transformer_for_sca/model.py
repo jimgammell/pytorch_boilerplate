@@ -1,8 +1,9 @@
-from typing import Optional
+from typing import Optional, List, Tuple
 
 import torch
 from torch import nn
 
+from ..base_module import BaseModule
 from .config import TransformerConfig
 from .building_blocks import *
 
@@ -21,7 +22,7 @@ class TransformerLayer(nn.Module):
         x = x + self.fnn(self.pre_fnn_norm(x))
         return x
 
-class Transformer(nn.Module):
+class Transformer(BaseModule):
     def __init__(self, config: TransformerConfig):
         super().__init__()
         self.config = config
@@ -37,3 +38,14 @@ class Transformer(nn.Module):
             x = transformer_layer(x)
         x = self.heads(x)
         return x
+    
+    def get_params_based_on_should_weight_decay(self) -> Tuple[List[nn.Parameter], List[nn.Parameter]]:
+        yes_decay, no_decay = [], []
+        for module in self.modules():
+            if isinstance(module, (nn.Linear, nn.Conv1d)):
+                yes_decay.append(module.weight)
+                if module.bias is not None:
+                    no_decay.append(module)
+            else:
+                no_decay.extend(module.parameters())
+        return yes_decay, no_decay

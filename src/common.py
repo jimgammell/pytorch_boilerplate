@@ -1,74 +1,91 @@
-import builtins
+from typing import Any, Callable, Optional, Dict
 import os
-import shutil
-import time
-import datetime
-from typing import *
-import random
-import numpy as np
+import socket
+import yaml
+import sys
+import logging
+
 import torch
 
-from utils.constant import Constant
+PLOT_WIDTH = 4
+PLOT_KWARGS: Dict[str, Any] = dict(rasterized=True)
+SAVEFIG_KWARGS: Dict[str, Any] = dict(dpi=300)
 
-SRC_DIR = Constant(os.path.dirname(os.path.realpath(__file__)))
-PROJ_DIR = Constant(os.path.abspath(os.path.join(SRC_DIR, '..')))
-CONFIG_DIRNAME = Constant('config')
-CONFIG_DIR = Constant(os.path.join(PROJ_DIR, CONFIG_DIRNAME))
-RESOURCE_DIRNAME = Constant('resources')
-RESOURCE_DIR = Constant(os.path.join(PROJ_DIR, RESOURCE_DIRNAME))
-OUTPUT_DIRNAME = Constant('outputs')
-OUTPUT_DIR = Constant(os.path.join(PROJ_DIR, OUTPUT_DIRNAME))
-numpy_rng = np.random.default_rng()
-_trial_name = None
-_verbose = None
-_seed = None
+SRC_DIR = os.path.dirname(os.path.realpath(__file__))
+PROJ_DIR = os.path.abspath(os.path.join(SRC_DIR, '..'))
+OUTPUT_DIR = os.path.join(PROJ_DIR, 'outputs')
+CONFIG_DIR = os.path.join(PROJ_DIR, 'config')
+RESOURCE_DIR = os.path.join(PROJ_DIR, 'resources')
+HOSTNAME = socket.gethostname()
+sys.path.insert(0, SRC_DIR)
 
-def get_trial_dir():
-    assert _trial_name is not None
-    trial_dir = os.path.join(OUTPUT_DIR, _trial_name)
-    os.makedirs(trial_dir, exist_ok=True)
-    return trial_dir
+assert os.path.exists(os.path.join(CONFIG_DIR, 'per_machine_config.yaml'))
+with open(os.path.join(CONFIG_DIR, 'per_machine_config.yaml'), 'r') as f:
+    config = yaml.load(f, Loader=yaml.FullLoader)
+for hostname_component in config.keys():
+    if hostname_component in HOSTNAME:
+        assert OPENWEBTEXT_ROOT is None
+        OPENWEBTEXT_ROOT = config[hostname_component]['openwebtext_root']
+        IMAGENET_ROOT = config[hostname_component]['imagenet']
+        ASCADv1_ROOT = config[hostname_component]['ascadv1']
+        ASCADv2_ROOT = config[hostname_component]['ascadv2']
 
-def get_log_path():
-    log_path = os.path.join(get_trial_dir(), 'log.out')
-    return log_path
-
-def set_trial_name(name: str):
-    global _trial_name
-    _trial_name = name
-
-def rename_trial(name: str):
-    global _trial_name
-    new_trial_dir = os.path.join(OUTPUT_DIR, name)
-    shutil.copytree(get_trial_dir(), new_trial_dir)
-    shutil.rmtree(get_trial_dir())
-    _trial_name = name
-
-def set_seed(
-    seed: Optional[int] = None
-) -> int:
-    if seed is None:
-        seed = time.time_ns() & 0xFFFFFFFF
-    global NUMPY_RNG
-    NUMPY_RNG = np.random.default_rng(seed)
-    torch.manual_seed(seed)
-    return seed
-
-def set_verbosity(
-    verbose: bool = True
-):
-    global _verbose
-    _verbose = verbose
-
-def print(*args, **kwargs):
-    with open(get_log_path(), 'a+') as f:
-        builtins.print(*args, file=f, **kwargs)
-    if _verbose:
-        builtins.print(*args, **kwargs)
-
-_seed = set_seed()
-_verbose = set_verbosity()
-set_trial_name('trial__{date:%Y_%m_%d_%H_%M_%S}'.format(date=datetime.datetime.now()))
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(CONFIG_DIR, exist_ok=True)
 os.makedirs(RESOURCE_DIR, exist_ok=True)
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+def get_worker_count() -> int:
+    worker_count = os.cpu_count()
+    assert worker_count is not None
+    worker_count = 3*worker_count//4
+    return worker_count
+
+if torch.cuda.is_available():
+    torch.backends.cudnn.benchmark = True
+    gpu_properties = torch.cuda.get_device_properties(torch.cuda.current_device())
+    arch = 10*gpu_properties.major + gpu_properties.minor
+    if arch >= 70:
+        torch.set_float32_matmul_precision('high')
+
+logger = logging.getLogger('general_logger')
+def init_logger(print: bool = True, logfile: Optional[str] = None, level: int = logging.NOTSET):
+    global logger
+    logger.setLevel(level)
+    formatter = logging.Formatter('%(asctime)s -%(levelname)s - [%(filename)s:%(lineno)d] - %(message)s')
+    if print:
+        print_handler = logging.StreamHandler()
+        print_handler.setFormatter(formatter)
+        logger.addHandler(print_handler)
+    if logfile is not None:
+        file_handler = logging.FileHandler(filename=logfile, mode='w', encoding='utf-8', delay=False)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+    class StreamToLogger:
+        def __init__(self, log_func: Callable[[str], None]):
+            self.log_func = log_func
+        
+        def write(self, message: str):
+            if message.strip():
+                self.log_func(message.strip())
+        
+        def flush(self):
+            pass
+    def log_exception(exc_type: Any, exc_val: Any, exc_traceback: Any):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_val, exc_traceback)
+        else:
+            logger.error('Unhandled exception:', exc_info=(exc_type, exc_val, exc_traceback))
+    sys.stdout = StreamToLogger(logger.info)
+    sys.stderr = StreamToLogger(logger.error)
+    sys.excepthook = log_exception
+
+    logger.debug('Initialized debugger and common settings.')
+    logger.debug(f'Host name: {HOSTNAME}')
+    logger.debug(f'Default device: {torch.cuda.get_device_name()}')
+    logger.debug(f'Project directory: {PROJ_DIR}')
+    logger.debug(f'Output directory: {OUTPUT_DIR}')
+    logger.debug(f'Config directory: {CONFIG_DIR}')
+    logger.debug(f'OpenWebText root: {OPENWEBTEXT_ROOT}')
+    assert torch.cuda.is_available()
+    if arch >= 70:
+        logger.debug('Using high matmul precision')
