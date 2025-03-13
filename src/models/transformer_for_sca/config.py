@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from math import isfinite
 
 @dataclass
 class TransformerConfig:
@@ -12,3 +13,23 @@ class TransformerConfig:
     rescale_norm_outputs: bool = True
     output_head_count: int = 16
     output_head_classes: int = 256
+
+    def __post_init__(self):
+        assert isinstance(self.patch_size, int)
+        assert isinstance(self.layer_count, int)
+        assert isinstance(self.attn_head_count, int)
+        assert isinstance(self.embedding_dim, int)
+        assert isinstance(self.dropout, float)
+        assert isinstance(self.bias, bool)
+        assert isinstance(self.norm_eps, float)
+        assert isinstance(self.rescale_norm_outputs, bool)
+        assert isinstance(self.output_head_count, int)
+        assert isinstance(self.output_head_classes, int)
+        assert 0 < self.patch_size
+        assert 0 < self.layer_count
+        assert 0 < self.attn_head_count
+        assert 0 < self.embedding_dim
+        assert 0 <= self.dropout and isfinite(self.dropout)
+        assert 0 < self.norm_eps and isfinite(self.norm_eps)
+        assert 0 < self.output_head_count
+        assert 0 < self.output_head_classes

@@ -1,13 +1,14 @@
-from typing import Dict, Any
+from typing import Dict, Any, Tuple
 from dataclasses import dataclass
 
 import torch
 from torch import nn, optim
 import lightning
 
-from utils import lr_schedulers
+import utils.lr_schedulers as lr_schedulers
 import models
 from .config import SupervisedClassificationConfig
+from ..metrics import get_accuracy, get_rank
 
 @dataclass
 class _ModuleHparams:
@@ -15,11 +16,11 @@ class _ModuleHparams:
     classifier_kwargs: Dict[str, Any]
     training_config: SupervisedClassificationConfig
 
-class Module(lightning.LightningModule):
+class SupervisedClassificationModule(lightning.LightningModule):
     hparams: _ModuleHparams
 
     def __init__(self,
-        classifier_name: models.AVAILABLE_MODELS,
+        classifier_name: str,
         classifier_kwargs: Dict[str, Any],
         training_config: SupervisedClassificationConfig
     ):
@@ -37,7 +38,7 @@ class Module(lightning.LightningModule):
         optimizer = optim.AdamW(
             param_groups, lr=self.hparams.training_config.base_lr,
             betas=(self.hparams.training_config.beta_1, self.hparams.training_config.beta_2),
-            eps=self.hparams.training_config.eps
+            eps=self.hparams.training_config.eps, fused=True
         )
         lr_scheduler = lr_schedulers.load(
             lr_schedulers.AVAILABLE_LR_SCHEDULERS(self.hparams.training_config.lr_scheduler_name),
@@ -51,7 +52,7 @@ class Module(lightning.LightningModule):
         optimizer.step(optimizer_closure)
         optimizer.zero_grad()
     
-    def step(self, batch, batch_idx: int, log_prefix: str = ''):
+    def step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int, log_prefix: str = ''):
         x, y = batch
         logits = self.classifier(x)
         if logits.dim() == 2: # single task learning
@@ -66,4 +67,12 @@ class Module(lightning.LightningModule):
             loss = nn.functional.cross_entropy(logits, y)
         else:
             assert False
-            
+        self.log(f'{log_prefix}_loss', loss, prog_bar=True, sync_dist=True, on_step=True)
+        self.log(f'{log_prefix}_acc', get_accuracy(logits, y), prog_bar=False, on_epoch=True)
+        self.log(f'{log_prefix}_rank', get_rank(logits, y), prog_bar=True, on_epoch=True)
+    
+    def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int):
+        self.step(batch, batch_idx, log_prefix='train')
+    
+    def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int):
+        self.step(batch, batch_idx, log_prefix='val')

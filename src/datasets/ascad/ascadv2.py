@@ -1,6 +1,6 @@
 import os
 from enum import Enum
-from typing import Optional, Callable
+from typing import Optional, Callable, Union
 
 import h5py
 import numpy as np
@@ -30,10 +30,10 @@ class ASCADv2_Targets(Enum):
     FULL = 'full' # fully-protected ASCADv2 implementation
 
 class ASCADv2(Dataset):
-    def __init__(self, root: str, target: ASCADv2_Targets, transform: Optional[Callable] = None, target_transform: Optional[Callable] = None):
+    def __init__(self, root: str, target: Union[str, ASCADv2_Targets], transform: Optional[Callable] = None, target_transform: Optional[Callable] = None):
         super().__init__()
         self.root = root
-        self.target = target
+        self.target = target if isinstance(target, ASCADv2_Targets) else ASCADv2_Targets(target)
         self.databases = None
         self.transform = transform or transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.float))
         self.target_transform = target_transform or transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.long))

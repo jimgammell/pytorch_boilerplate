@@ -18,6 +18,20 @@ class DataModuleConfig:
     persistent_workers: bool = True
     prefetch_factor: int = 4
 
+    def __post_init__(self):
+        assert isinstance(self.val_prop, float)
+        assert isinstance(self.train_batch_size, int)
+        assert isinstance(self.eval_batch_size, int)
+        assert self.num_workers is None or isinstance(self.num_workers, int)
+        assert isinstance(self.pin_memory, bool)
+        assert isinstance(self.persistent_workers, bool)
+        assert isinstance(self.prefetch_factor, int)
+        assert 0 <= self.val_prop < 1
+        assert 0 < self.train_batch_size
+        assert 0 < self.eval_batch_size
+        assert self.num_workers is None or 0 <= self.num_workers
+        assert 0 <= self.prefetch_factor
+
 class DataModule(lightning.LightningDataModule):
     def __init__(self,
         base_train_dataset: Dataset,

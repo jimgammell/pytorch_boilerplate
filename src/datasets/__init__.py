@@ -1,5 +1,5 @@
 import os
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Union
 from enum import Enum
 
 from torch.utils.data import Dataset
@@ -26,8 +26,9 @@ def get_root(dataset_name: AVAILABLE_DATASETS) -> str:
     else:
         return os.path.join(RESOURCE_DIR, dataset_name.value)
 
-def load(dataset_name: AVAILABLE_DATASETS, **kwargs) -> Tuple[Dataset, Optional[Dataset]]:
-    assert dataset_name in AVAILABLE_DATASETS
+def load(dataset_name: Union[str, AVAILABLE_DATASETS], **kwargs) -> Tuple[Dataset, Optional[Dataset]]:
+    if isinstance(dataset_name, str):
+        dataset_name = AVAILABLE_DATASETS(dataset_name)
     root = get_root(dataset_name)
     if dataset_name == AVAILABLE_DATASETS.MNIST:
         raise NotImplementedError
