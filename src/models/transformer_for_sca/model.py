@@ -67,7 +67,7 @@ class Transformer(BaseModule):
                 if module.to_out.bias is not None:
                     no_decay.append(module.to_out.bias)
             elif isinstance(module, Patchifier):
-                yes_decay.append(module.patch_embedding.weight)
+                no_decay.append(module.patch_embedding.weight)
                 if module.patch_embedding.bias is not None:
                     no_decay.append(module.patch_embedding.bias)
         assert all(param is not None for param in yes_decay)

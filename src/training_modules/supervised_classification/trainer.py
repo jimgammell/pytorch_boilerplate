@@ -87,13 +87,13 @@ class SupervisedClassificationTrainer:
                 self.classifier_name, classifier_config_kwargs, training_config
             )
             early_stopping_checkpoint = ModelCheckpoint(monitor='val_rank', mode='min', save_top_k=1, dirpath=save_dir, filename='best_checkpoint')
-            progress_bar = TQDMProgressBar(refresh_rate=10)
+            progress_bar = TQDMProgressBar(refresh_rate=1) #10)
             trainer = LightningTrainer(
                 max_steps=training_config.training_steps,
                 #log_every_n_steps=100,
                 precision=training_config.dtype,
                 logger=TensorBoardLogger(save_dir, name='', version=''),
-                callbacks=[early_stopping_checkpoint, progress_bar]
+                callbacks=[]#[early_stopping_checkpoint, progress_bar]
             )
             trainer.fit(training_module, datamodule=self.datamodule, ckpt_path=checkpoint_path)
             extract_training_curves(save_dir)

@@ -35,8 +35,8 @@ def create_binary_trace_dataset(root: str, chunk_size: int = 100):
     del binary_database
 
 class ASCADv1_Targets(Enum):
-    UNPROTECTED = 'unprotected'
     FULL = 'full'
+    UNPROTECTED = 'unprotected'
 
 class ASCADv1(BaseDataset):
     database_shape = (300000, 250000)
@@ -83,17 +83,21 @@ class ASCADv1(BaseDataset):
         _, std = self._get_mean_and_std()
         return std
     
-    def __init__(self, root: str, train: bool = True, target: Union[str, ASCADv1_Targets] = 'full', transform: Optional[Callable] = None, target_transform: Optional[Callable] = None):
+    def __init__(self, root: str, train: bool = True, target: Union[str, ASCADv1_Targets] = 'full', transform: Optional[Callable] = None, target_transform: Optional[Callable] = None, store_in_ram: bool = False):
         super().__init__()
         self.root = root
         self.train = train
         self.target = target if isinstance(target, ASCADv1_Targets) else ASCADv1_Targets(target)
         self.transform = transform or transforms.Compose([transforms.Lambda(lambda x: (x - self.mean)/(self.std+1e-6)), transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.float))])
         self.target_transform = target_transform or transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.long))
+        self.store_in_ram = store_in_ram
         create_binary_trace_dataset(self.root)
         self.database_path = os.path.join(self.root, 'ascadv1_var_traces.npy')
         assert os.path.exists(self.database_path)
-        self.database = None
+        if store_in_ram:
+            self.database = np.array(np.memmap(self.database_path, mode='r', shape=self.database_shape))
+        else:
+            self.database = None
         self.metadata = None
     
     def compute_target(self, metadata):
@@ -113,15 +117,16 @@ class ASCADv1(BaseDataset):
     
     def load_datapoint(self, idx):
         if self.database is None:
-            self.database = np.memmap(self.database_path, mode='r', shape=self.database_shape)
+            self.full_database = h5py.File(os.path.join(self.root, DATABASE_FILENAME), 'r')#
+            self.database = self.full_database['traces'] #np.memmap(self.database_path, mode='r', shape=self.database_shape)
         if self.metadata is None:
-            with h5py.File(os.path.join(self.root, DATABASE_FILENAME), mode='r', swmr=True) as f:
-                metadatabase = f['metadata']
-                self.metadata = {
-                    'key': np.array(metadatabase['key'], dtype=np.uint8),
-                    'plaintext': np.array(metadatabase['plaintext'], dtype=np.uint8),
-                    'masks': np.array(metadatabase['masks'], dtype=np.uint8)
-                }
+            #with h5py.File(os.path.join(self.root, DATABASE_FILENAME), mode='r', swmr=True) as f:
+            metadatabase = self.full_database['metadata']#f['metadata']
+            self.metadata = {
+                'key': np.array(metadatabase['key'], dtype=np.uint8),
+                'plaintext': np.array(metadatabase['plaintext'], dtype=np.uint8),
+                'masks': np.array(metadatabase['masks'], dtype=np.uint8)
+            }
         trace = np.array(self.database[idx, :], dtype=np.float32).reshape(*self.shape)
         metadata = {key: val[idx] for key, val in self.metadata.items()}
         return trace, metadata

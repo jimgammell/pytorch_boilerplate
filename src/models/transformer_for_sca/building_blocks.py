@@ -29,14 +29,13 @@ class AttentionLayer(BaseModule):
         super().__init__()
         self.config = config
         self.head_dim = self.config.embedding_dim // self.config.attn_head_count
-        self.to_qkv = nn.Linear(self.config.embedding_dim, 3*self.config.embedding_dim, bias=self.config.bias)
+        self.to_qkv = nn.Linear(self.config.embedding_dim, 3*self.config.embedding_dim, bias=False)
         self.to_out = nn.Linear(self.config.embedding_dim, self.config.embedding_dim, bias=self.config.bias)
         self.out_dropout = nn.Dropout(self.config.dropout)
         self.rotary_emb = RotaryEmbedding(dim=self.head_dim)
-        nn.init.normal_(self.to_qkv.weight, mean=0.0, std=sqrt(2./5/self.config.embedding_dim))
-        nn.init.normal_(self.to_out.weight, mean=0.0, std=1/sqrt(self.config.embedding_dim)/self.config.layer_count)
+        nn.init.xavier_uniform_(self.to_qkv.weight)
+        nn.init.xavier_uniform_(self.to_out.weight)
         if self.config.bias:
-            nn.init.constant_(self.to_qkv.bias, 0)
             nn.init.constant_(self.to_out.bias, 0)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -59,8 +58,8 @@ class FeedForwardLayer(BaseModule):
         self.w12 = nn.Linear(self.config.embedding_dim, 2*self.config.embedding_dim, bias=self.config.bias)
         self.w3 = nn.Linear(self.config.embedding_dim, self.config.embedding_dim, bias=self.config.bias)
         self.dropout = nn.Dropout(self.config.dropout)
-        nn.init.normal_(self.w12.weight, mean=0.0, std=sqrt(2./5/self.config.embedding_dim))
-        nn.init.normal_(self.w3.weight, mean=0.0, std=1/sqrt(self.config.embedding_dim)/self.config.layer_count)
+        nn.init.xavier_uniform_(self.w12.weight)
+        nn.init.xavier_uniform_(self.w3.weight)
         if self.config.bias:
             nn.init.constant_(self.w12.bias, 0)
             nn.init.constant_(self.w3.bias, 0)
@@ -77,12 +76,11 @@ class AttentionPoolingLayer(BaseModule):
         self.config = config
         self.head_dim = self.config.embedding_dim // self.config.attn_head_count
         self.pool_queries = nn.Parameter(torch.randn(1, self.config.output_head_count, self.config.embedding_dim))
-        self.to_kv = nn.Linear(self.config.embedding_dim, 2*self.config.embedding_dim, bias=self.config.bias)
+        self.to_kv = nn.Linear(self.config.embedding_dim, 2*self.config.embedding_dim, bias=False)
         self.to_out = nn.Linear(self.config.embedding_dim, self.config.output_head_classes, bias=self.config.bias)
-        nn.init.normal_(self.to_kv.weight, mean=0.0, std=sqrt(2./5/self.config.embedding_dim))
+        nn.init.xavier_uniform_(self.to_kv.weight)
         nn.init.xavier_uniform_(self.to_out.weight)
         if self.config.bias:
-            nn.init.constant_(self.to_kv.bias, 0)
             nn.init.constant_(self.to_out.bias, 0)
     
     def forward(self, x):
