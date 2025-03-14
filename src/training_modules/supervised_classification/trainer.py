@@ -39,7 +39,7 @@ class SupervisedClassificationTrainer:
         save_dir: str,
         classifier_config_kwargs: Dict[str, Any] = {},
         training_config_kwargs: Dict[str, Any] = {},
-        may_resume: bool = False
+        may_resume: bool = True
     ):
         _classifier_config_kwargs = copy(self.base_classifier_config_kwargs)
         _classifier_config_kwargs.update(classifier_config_kwargs)
@@ -90,8 +90,7 @@ class SupervisedClassificationTrainer:
             progress_bar = TQDMProgressBar(refresh_rate=10)
             trainer = LightningTrainer(
                 max_steps=training_config.training_steps,
-                val_check_interval=10,
-                log_every_n_steps=100,
+                #log_every_n_steps=100,
                 precision=training_config.dtype,
                 logger=TensorBoardLogger(save_dir, name='', version=''),
                 callbacks=[early_stopping_checkpoint, progress_bar]

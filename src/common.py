@@ -19,13 +19,13 @@ RESOURCE_DIR = os.path.join(PROJ_DIR, 'resources')
 HOSTNAME = socket.gethostname()
 sys.path.insert(0, SRC_DIR)
 
+AVAILABLE_CONFIG_NAMES = [x.split('.')[0] for x in os.listdir(CONFIG_DIR) if x != 'per_machine_config.yaml']
 assert os.path.exists(os.path.join(CONFIG_DIR, 'per_machine_config.yaml'))
 with open(os.path.join(CONFIG_DIR, 'per_machine_config.yaml'), 'r') as f:
     config = yaml.load(f, Loader=yaml.FullLoader)
 for hostname_component in config.keys():
     if hostname_component in HOSTNAME:
-        assert OPENWEBTEXT_ROOT is None
-        OPENWEBTEXT_ROOT = config[hostname_component]['openwebtext_root']
+        OPENWEBTEXT_ROOT = config[hostname_component]['openwebtext']
         IMAGENET_ROOT = config[hostname_component]['imagenet']
         ASCADv1_ROOT = config[hostname_component]['ascadv1']
         ASCADv2_ROOT = config[hostname_component]['ascadv2']

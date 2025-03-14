@@ -7,6 +7,7 @@ from torch.utils.data import Dataset, Subset, DataLoader
 import lightning
 
 from common import *
+from .base_dataset import BaseDataset
 
 @dataclass
 class DataModuleConfig:
@@ -34,9 +35,9 @@ class DataModuleConfig:
 
 class DataModule(lightning.LightningDataModule):
     def __init__(self,
-        base_train_dataset: Dataset,
+        base_train_dataset: BaseDataset,
         config: DataModuleConfig,
-        test_dataset: Optional[Dataset],
+        test_dataset: Optional[BaseDataset],
     ):
         super().__init__()
         self.base_train_dataset = base_train_dataset
@@ -48,7 +49,7 @@ class DataModule(lightning.LightningDataModule):
     def setup(self, stage: str):
         self.val_length = int(len(self.base_train_dataset)*self.config.val_prop)
         if self.indices is None:
-            self.indices = np.random.choice(len(self.base_train_dataset), len(self.base_train_dataset), replace=True)
+            self.indices = np.random.choice(len(self.base_train_dataset), len(self.base_train_dataset), replace=True).astype(int).tolist()
         train_indices = self.indices[self.val_length:]
         val_indices = self.indices[:self.val_length]
         self.train_dataset = Subset(self.base_train_dataset, train_indices)

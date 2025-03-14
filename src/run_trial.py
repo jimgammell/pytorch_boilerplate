@@ -1,0 +1,68 @@
+import os
+import argparse
+import yaml
+from dataclasses import replace
+
+from common import *
+import datasets
+import models
+from training_modules.supervised_classification import SupervisedClassificationTrainer
+
+def train_supervised_classifier(args, default_training_config_kwargs, default_model_config_kwargs, datamodule_config_kwargs, dataset_kwargs={}):
+    assert args.dataset is not None
+    assert args.nn_arch is not None
+    trainer = SupervisedClassificationTrainer(
+        args.nn_arch, default_model_config_kwargs, default_training_config_kwargs, args.dataset, dataset_kwargs, datamodule_config_kwargs
+    )
+    trial_name = args.trial_name or f'{args.dataset}_{args.nn_arch}'
+    save_dir = os.path.join(OUTPUT_DIR, trial_name)
+    os.makedirs(save_dir, exist_ok=True)
+    init_logger(print=not(args.quiet), logfile=os.path.join(save_dir, 'log'), level=args.log_level)
+    trainer.run(os.path.join(save_dir, 'trainer_output'))
+
+def main():
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest='action', required=True)
+    parser.add_argument(
+        '--trial-name', default=None, action='store',
+        help=f'Outputs will be stored in `{os.path.join(OUTPUT_DIR, "<TRIAL_NAME>")}.'
+    )
+    parser.add_argument(
+        '--log-level', default='DEBUG', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+        help='How much to print/log. Probably best to set this to `DEBUG` in most cases, but you can make the program more-terse if you want.'
+    )
+    parser.add_argument(
+        '--quiet', default=False, action='store_true',
+        help=f'Whether or not we should print to the terminal. Things will print to `{os.path.join(OUTPUT_DIR, "<TRIAL_NAME>", "log")} regardless.'
+    )
+    supervised_classification_parser = subparsers.add_parser('supervised-classify')
+    supervised_classification_parser.add_argument(
+        '--dataset', action='store', default=None, type=str, choices=[x.value for x in datasets.AVAILABLE_DATASETS],
+        help='Which dataset to train on.'
+    )
+    supervised_classification_parser.add_argument(
+        '--nn-arch', action='store', default=None, type=str, choices=[x.value for x in models.AVAILABLE_MODELS],
+        help='Which model architecture to use for the ARLM.'
+    )
+    supervised_classification_parser.add_argument(
+        '--config-file', action='store', default=None, choices=AVAILABLE_CONFIG_NAMES,
+        help=f'Which hyperparameter config file to use: `{os.path.join(CONFIG_DIR, "<CONFIG_FILE>.yaml")}`. This file must exist and be properly set up.'
+    )
+    args = parser.parse_args()
+
+    if args.action in ['supervised-classify']:
+        config_name = args.config_file or f'{args.dataset}_{args.nn_arch}'
+        config_path = os.path.join(CONFIG_DIR, f'{config_name}.yaml')
+        with open(config_path, 'r') as f:
+            config = yaml.load(f, Loader=yaml.FullLoader)
+        default_model_config_kwargs = config['default_model_config']
+        default_training_config_kwargs = config['default_training_config']
+        datamodule_config_kwargs = config['datamodule_config']
+        dataset_kwargs = config['dataset_config']
+        if args.action == 'supervised-classify':
+            train_supervised_classifier(args, default_training_config_kwargs, default_model_config_kwargs, datamodule_config_kwargs, dataset_kwargs)
+    else:
+        assert False
+
+if __name__ == '__main__':
+    main()

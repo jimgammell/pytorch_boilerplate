@@ -1,5 +1,5 @@
 from typing import Dict, Any, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from math import isfinite
 
 from lightning.fabric.plugins.precision.precision import _PRECISION_INPUT
@@ -9,13 +9,14 @@ class SupervisedClassificationConfig:
     training_steps: int
     base_lr: float = 2e-4
     lr_scheduler_name: Optional[str] = None
-    lr_scheduler_kwargs: Dict[str, Any] = {}
+    lr_scheduler_kwargs: Dict[str, Any] = field(default_factory=dict)
     beta_1: float = 0.9
     beta_2: float = 0.999
     eps: float = 1e-8
     weight_decay: float = 0.0
     grad_clip: Optional[float] = 1.0
     dtype: _PRECISION_INPUT = 'bf16-true'
+    compile: bool = False
 
     def __post_init__(self):
         assert isinstance(self.training_steps, int)
@@ -28,6 +29,7 @@ class SupervisedClassificationConfig:
         assert isinstance(self.weight_decay, float)
         assert self.grad_clip is None or isinstance(self.grad_clip, float)
         assert isinstance(self.dtype, str)
+        assert isinstance(self.compile, bool)
         assert self.training_steps > 0
         assert 0 < self.base_lr and isfinite(self.base_lr)
         assert all(isinstance(x, str) for x in self.lr_scheduler_kwargs)

@@ -5,9 +5,10 @@ import torch
 from torch import nn
 from rotary_embedding_torch import RotaryEmbedding
 
+from ..base_module import BaseModule
 from .config import TransformerConfig
 
-class NormLayer(nn.Module):
+class NormLayer(BaseModule):
     def __init__(self, config: TransformerConfig, layer_num: Optional[int] = None):
         super().__init__()
         self.config = config
@@ -23,7 +24,7 @@ class NormLayer(nn.Module):
         #   Just going with this approach though in case I'm missing something.
         return self.scale*nn.functional.rms_norm(x, self.weight.shape, weight=self.weight, eps=self.config.norm_eps)
 
-class AttentionLayer(nn.Module):
+class AttentionLayer(BaseModule):
     def __init__(self, config: TransformerConfig):
         super().__init__()
         self.config = config
@@ -51,7 +52,7 @@ class AttentionLayer(nn.Module):
         out = self.out_dropout(out)
         return out
 
-class FeedForwardLayer(nn.Module):
+class FeedForwardLayer(BaseModule):
     def __init__(self, config: TransformerConfig):
         super().__init__()
         self.config = config
@@ -70,7 +71,7 @@ class FeedForwardLayer(nn.Module):
         out = self.dropout(out)
         return out
 
-class AttentionPoolingLayer(nn.Module):
+class AttentionPoolingLayer(BaseModule):
     def __init__(self, config: TransformerConfig):
         super().__init__()
         self.config = config
@@ -96,7 +97,7 @@ class AttentionPoolingLayer(nn.Module):
         logits = self.to_out(pre_out)
         return logits
 
-class Patchifier(nn.Module):
+class Patchifier(BaseModule):
     def __init__(self, config: TransformerConfig):
         super().__init__()
         self.config = config
@@ -105,6 +106,7 @@ class Patchifier(nn.Module):
     def forward(self, x):
         batch_size, _, dim = x.shape
         padding = self.config.patch_size*ceil(dim/self.config.patch_size) - dim
-        x = torch.cat([x, torch.zeros(batch_size, 1, padding, dtype=x.dtype, device=x.device)])
+        if padding > 0:
+            x = torch.cat([x, torch.zeros(batch_size, 1, padding, dtype=x.dtype, device=x.device)])
         x = self.patch_embedding(x).transpose(1, 2)
         return x

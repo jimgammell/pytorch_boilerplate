@@ -1,0 +1,35 @@
+default_model_config:
+  patch_size: 1000
+  layer_count: 3
+  attn_head_count: 12
+  embedding_dim: 768
+  dropout: 0.0
+  bias: false
+  norm_eps: 1.e-5
+  rescale_norm_outputs: true
+  output_head_count: 16
+  output_head_classes: 256
+default_training_config:
+  training_steps: 5000
+  base_lr: 2.e-4
+  lr_scheduler_name: cosine_decay
+  lr_scheduler_kwargs:
+    warmup_steps: 2000
+    const_steps: 3000
+  beta_1: 0.9
+  beta_2: 0.99
+  eps: 1.e-8
+  weight_decay: 1.e-4
+  grad_clip: 1.0
+  dtype: bf16-true
+  compile: true
+datamodule_config:
+  val_prop: 0.1
+  train_batch_size: 128
+  eval_batch_size: 512
+  num_workers: null # detect automatically
+  pin_memory: true
+  persistent_workers: true
+  prefetch_factor: 4
+dataset_config:
+  target: unprotected

@@ -42,10 +42,34 @@ class Transformer(BaseModule):
     def get_params_based_on_should_weight_decay(self) -> Tuple[List[nn.Parameter], List[nn.Parameter]]:
         yes_decay, no_decay = [], []
         for module in self.modules():
-            if isinstance(module, (nn.Linear, nn.Conv1d)):
-                yes_decay.append(module.weight)
-                if module.bias is not None:
-                    no_decay.append(module)
-            else:
-                no_decay.extend(module.parameters())
+            if isinstance(module, NormLayer):
+                no_decay.append(module.weight)
+            elif isinstance(module, AttentionLayer):
+                yes_decay.append(module.to_qkv.weight)
+                yes_decay.append(module.to_out.weight)
+                if module.to_qkv.bias is not None:
+                    no_decay.append(module.to_qkv.bias)
+                if module.to_out.bias is not None:
+                    no_decay.append(module.to_out.bias)
+            elif isinstance(module, FeedForwardLayer):
+                yes_decay.append(module.w12.weight)
+                yes_decay.append(module.w3.weight)
+                if module.w12.bias is not None:
+                    no_decay.append(module.w12.bias)
+                if module.w3.bias is not None:
+                    no_decay.append(module.w3.bias)
+            elif isinstance(module, AttentionPoolingLayer):
+                yes_decay.append(module.to_kv.weight)
+                yes_decay.append(module.to_out.weight)
+                no_decay.append(module.pool_queries)
+                if module.to_kv.bias is not None:
+                    no_decay.append(module.to_kv.bias)
+                if module.to_out.bias is not None:
+                    no_decay.append(module.to_out.bias)
+            elif isinstance(module, Patchifier):
+                yes_decay.append(module.patch_embedding.weight)
+                if module.patch_embedding.bias is not None:
+                    no_decay.append(module.patch_embedding.bias)
+        assert all(param is not None for param in yes_decay)
+        assert all(param is not None for param in no_decay)
         return yes_decay, no_decay

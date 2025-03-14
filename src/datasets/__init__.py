@@ -37,7 +37,9 @@ def load(dataset_name: Union[str, AVAILABLE_DATASETS], **kwargs) -> Tuple[Datase
     elif dataset_name == AVAILABLE_DATASETS.OPENWEBTEXT:
         raise NotImplementedError
     elif dataset_name == AVAILABLE_DATASETS.ASCADv1:
-        raise NotImplementedError
+        from .ascad.ascadv1 import ASCADv1
+        train_dataset = ASCADv1(root, **kwargs)
+        test_dataset = None
     elif dataset_name == AVAILABLE_DATASETS.ASCADv2:
         from .ascad.ascadv2 import ASCADv2
         train_dataset = ASCADv2(root, **kwargs)

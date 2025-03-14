@@ -28,6 +28,8 @@ class SupervisedClassificationModule(lightning.LightningModule):
         self.save_hyperparameters()
 
         self.classifier = models.load(self.hparams.classifier_name, self.hparams.classifier_kwargs)
+        if self.hparams.training_config.compile:
+            self.classifier.compile()
         
     def configure_optimizers(self):
         yes_weight_decay, no_weight_decay = self.classifier.get_params_based_on_should_weight_decay()
@@ -70,9 +72,12 @@ class SupervisedClassificationModule(lightning.LightningModule):
         self.log(f'{log_prefix}_loss', loss, prog_bar=True, sync_dist=True, on_step=True)
         self.log(f'{log_prefix}_acc', get_accuracy(logits, y), prog_bar=False, on_epoch=True)
         self.log(f'{log_prefix}_rank', get_rank(logits, y), prog_bar=True, on_epoch=True)
+        return loss
     
     def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int):
-        self.step(batch, batch_idx, log_prefix='train')
+        loss = self.step(batch, batch_idx, log_prefix='train')
+        return loss
     
     def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int):
-        self.step(batch, batch_idx, log_prefix='val')
+        loss = self.step(batch, batch_idx, log_prefix='val')
+        return loss
