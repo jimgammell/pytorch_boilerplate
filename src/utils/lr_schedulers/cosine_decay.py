@@ -25,5 +25,5 @@ class CosineDecayLRSched(optim.lr_scheduler.LambdaLR):
         super().__init__(optimizer, self.lr_lambda)
     
     def lr_lambda(self, current_step: int) -> float:
-        assert 0 <= current_step < self.total_steps
-        return self.scheduler[current_step]
+        assert 0 <= current_step <= self.total_steps, current_step
+        return self.scheduler[current_step] if current_step < self.total_steps else 0.

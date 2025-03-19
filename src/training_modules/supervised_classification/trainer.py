@@ -96,6 +96,7 @@ class SupervisedClassificationTrainer:
                 callbacks=[]#[early_stopping_checkpoint, progress_bar]
             )
             trainer.fit(training_module, datamodule=self.datamodule, ckpt_path=checkpoint_path)
+            print(trainer.test(training_module, datamodule=self.datamodule))
             extract_training_curves(save_dir)
         if os.path.exists(os.path.join(save_dir, 'training_curves.npz')):
             training_curves = load_training_curves(save_dir)

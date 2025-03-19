@@ -49,7 +49,7 @@ class DataModule(lightning.LightningDataModule):
     def setup(self, stage: str):
         self.val_length = int(len(self.base_train_dataset)*self.config.val_prop)
         if self.indices is None:
-            self.indices = np.random.choice(len(self.base_train_dataset), len(self.base_train_dataset), replace=True).astype(int).tolist()
+            self.indices = np.random.choice(len(self.base_train_dataset), len(self.base_train_dataset), replace=False).astype(int).tolist()
         train_indices = self.indices[self.val_length:]
         val_indices = self.indices[:self.val_length]
         self.train_dataset = Subset(self.base_train_dataset, train_indices)

@@ -1,6 +1,8 @@
 from typing import Union, Callable, Optional
 import os
 from enum import Enum
+import ctypes
+import multiprocessing
 
 from tqdm import tqdm
 import h5py
@@ -38,7 +40,7 @@ class ASCADv1_Targets(Enum):
     FULL = 'full'
     UNPROTECTED = 'unprotected'
 
-class ASCADv1(BaseDataset):
+class ASCADv1_Var(BaseDataset):
     database_shape = (300000, 250000)
     @property
     def shape(self):
@@ -83,52 +85,64 @@ class ASCADv1(BaseDataset):
         _, std = self._get_mean_and_std()
         return std
     
-    def __init__(self, root: str, train: bool = True, target: Union[str, ASCADv1_Targets] = 'full', transform: Optional[Callable] = None, target_transform: Optional[Callable] = None, store_in_ram: bool = False):
+    def __init__(self,
+        root: str, train: bool = True, target: Union[str, ASCADv1_Targets] = 'full', transform: Optional[Callable] = None,
+        target_transform: Optional[Callable] = None, store_in_ram: bool = False
+    ):
         super().__init__()
         self.root = root
         self.train = train
         self.target = target if isinstance(target, ASCADv1_Targets) else ASCADv1_Targets(target)
-        self.transform = transform or transforms.Compose([transforms.Lambda(lambda x: (x - self.mean)/(self.std+1e-6)), transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.float))])
-        self.target_transform = target_transform or transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.long))
+        self.transform = transform or transforms.Lambda(lambda x: (x - self.mean)/(self.std+1e-6))
+        self.target_transform = target_transform
         self.store_in_ram = store_in_ram
         create_binary_trace_dataset(self.root)
         self.database_path = os.path.join(self.root, 'ascadv1_var_traces.npy')
         assert os.path.exists(self.database_path)
-        if store_in_ram:
-            self.database = np.array(np.memmap(self.database_path, mode='r', shape=self.database_shape))
+        if self.store_in_ram: # based on https://discuss.pytorch.org/t/dataloader-resets-dataset-state/27960/4
+            #data_on_disk = np.memmap(self.database_path, mode='r', shape=self.database_shape)
+            #base_shared_array = multiprocessing.Array(ctypes.c_int8, data_on_disk.size)
+            #shared_array = np.ctypeslib.as_array(base_shared_array.get_obj())
+            #shared_array = shared_array.reshape(*self.database_shape)
+            #self.database = torch.from_numpy(shared_array)
+            self.database = torch.from_numpy(np.memmap(self.database_path, mode='r', shape=self.database_shape))
         else:
             self.database = None
         self.metadata = None
+        self.aes_sbox = torch.from_numpy(AES_SBOX).to(torch.long)
     
     def compute_target(self, metadata):
         key = metadata['key']
         plaintext = metadata['plaintext']
         masks = metadata['masks']
-        r = np.concatenate([np.zeros(2, dtype=np.uint8), masks[:-2]])
+        r = np.concatenate([torch.zeros(2, dtype=torch.long, device=masks.device), masks[:-2]])
         r_in = masks[-2]
         r_out = masks[-1]
         if self.target == ASCADv1_Targets.UNPROTECTED:
-            out = np.uint8(AES_SBOX[plaintext ^ key] ^ r_out)
+            out = torch.bitwise_xor(self.aes_sbox[torch.bitwise_xor(plaintext, key)], r_out)
         elif self.target == ASCADv1_Targets.FULL:
-            out = np.uint8(AES_SBOX[plaintext ^ key])
+            out = self.aes_sbox[torch.bitwise_xor(plaintext, key)]
         else:
             assert False
         return out
     
     def load_datapoint(self, idx):
+        if self.metadata is None:
+            with h5py.File(os.path.join(self.root, DATABASE_FILENAME), 'r') as f:
+                metadatabase = f['metadata']
+                self.metadata = {
+                    'key': np.array(metadatabase['key'], dtype=np.uint8),
+                    'plaintext': np.array(metadatabase['plaintext'], dtype=np.uint8),
+                    'masks': np.array(metadatabase['masks'], dtype=np.uint8)
+                }
         if self.database is None:
             self.full_database = h5py.File(os.path.join(self.root, DATABASE_FILENAME), 'r')#
             self.database = self.full_database['traces'] #np.memmap(self.database_path, mode='r', shape=self.database_shape)
-        if self.metadata is None:
-            #with h5py.File(os.path.join(self.root, DATABASE_FILENAME), mode='r', swmr=True) as f:
-            metadatabase = self.full_database['metadata']#f['metadata']
-            self.metadata = {
-                'key': np.array(metadatabase['key'], dtype=np.uint8),
-                'plaintext': np.array(metadatabase['plaintext'], dtype=np.uint8),
-                'masks': np.array(metadatabase['masks'], dtype=np.uint8)
-            }
-        trace = np.array(self.database[idx, :], dtype=np.float32).reshape(*self.shape)
-        metadata = {key: val[idx] for key, val in self.metadata.items()}
+        if self.store_in_ram:
+            trace = self.database[idx, :].to(torch.float).reshape(*self.shape)
+        else:
+            trace = torch.from_numpy(self.database[idx, :]).to(torch.float).reshape(*self.shape)
+        metadata = {key: torch.tensor(val[idx], dtype=torch.long) for key, val in self.metadata.items()}
         return trace, metadata
     
     def __getitem__(self, idx: int):

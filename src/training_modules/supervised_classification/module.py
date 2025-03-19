@@ -83,3 +83,7 @@ class SupervisedClassificationModule(lightning.LightningModule):
     def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int):
         loss = self.step(batch, batch_idx, log_prefix='val')
         return loss
+    
+    def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int):
+        loss = self.step(batch, batch_idx, log_prefix='test')
+        return loss

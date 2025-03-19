@@ -20,6 +20,10 @@ def train_supervised_classifier(args, default_training_config_kwargs, default_mo
     init_logger(print=not(args.quiet), logfile=os.path.join(save_dir, 'log'), level=args.log_level)
     trainer.run(os.path.join(save_dir, 'trainer_output'))
 
+def compute_parametric_stats(args):
+    assert args.dataset is not None
+    
+
 def main():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest='action', required=True)
@@ -34,6 +38,11 @@ def main():
     parser.add_argument(
         '--quiet', default=False, action='store_true',
         help=f'Whether or not we should print to the terminal. Things will print to `{os.path.join(OUTPUT_DIR, "<TRIAL_NAME>", "log")} regardless.'
+    )
+    parametric_stats = subparsers.add_parser('compute-parametric-stats')
+    parametric_stats.add_argument(
+        '--dataset', action='store', default=None, type=str, choices=[x.value for x in datasets.AVAILABLE_DATASETS],
+        help='Which dataset to compute stats for.'
     )
     supervised_classification_parser = subparsers.add_parser('supervised-classify')
     supervised_classification_parser.add_argument(
@@ -61,6 +70,8 @@ def main():
         dataset_kwargs = config['dataset_config']
         if args.action == 'supervised-classify':
             train_supervised_classifier(args, default_training_config_kwargs, default_model_config_kwargs, datamodule_config_kwargs, dataset_kwargs)
+    elif args.action  == 'compute-parametric-stats':
+        compute_parametric_stats(args)
     else:
         assert False
 

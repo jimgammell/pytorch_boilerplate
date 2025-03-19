@@ -8,7 +8,8 @@ from common import *
 
 class AVAILABLE_DATASETS(Enum):
     MNIST = 'mnist'
-    ASCADv1 = 'ascadv1'
+    ASCADv1_Fixed = 'ascadv1_fixed'
+    ASCADv1_Var = 'ascadv1_var'
     ASCADv2 = 'ascadv2'
     IMAGENET = 'imagenet'
     OPENWEBTEXT = 'openwebtext'
@@ -19,7 +20,9 @@ def get_root(dataset_name: AVAILABLE_DATASETS) -> str:
         return IMAGENET_ROOT
     elif dataset_name == AVAILABLE_DATASETS.OPENWEBTEXT:
         return OPENWEBTEXT_ROOT
-    elif dataset_name == AVAILABLE_DATASETS.ASCADv1:
+    elif dataset_name == AVAILABLE_DATASETS.ASCADv1_Fixed:
+        return ASCADv1_ROOT
+    elif dataset_name == AVAILABLE_DATASETS.ASCADv1_Var:
         return ASCADv1_ROOT
     elif dataset_name == AVAILABLE_DATASETS.ASCADv2:
         return ASCADv2_ROOT
@@ -36,9 +39,13 @@ def load(dataset_name: Union[str, AVAILABLE_DATASETS], **kwargs) -> Tuple[Datase
         raise NotImplementedError
     elif dataset_name == AVAILABLE_DATASETS.OPENWEBTEXT:
         raise NotImplementedError
-    elif dataset_name == AVAILABLE_DATASETS.ASCADv1:
-        from .ascad.ascadv1 import ASCADv1
-        train_dataset = ASCADv1(root, **kwargs)
+    elif dataset_name == AVAILABLE_DATASETS.ASCADv1_Fixed:
+        from .ascad.ascadv1_fixed import ASCADv1_Fixed
+        train_dataset = ASCADv1_Fixed(root, train=True, **kwargs)
+        test_dataset = ASCADv1_Fixed(root, train=False, **kwargs)
+    elif dataset_name == AVAILABLE_DATASETS.ASCADv1_Var:
+        from .ascad.ascadv1_var import ASCADv1_Var
+        train_dataset = ASCADv1_Var(root, **kwargs)
         test_dataset = None
     elif dataset_name == AVAILABLE_DATASETS.ASCADv2:
         from .ascad.ascadv2 import ASCADv2
