@@ -27,16 +27,20 @@ def get_trace_sample_stats(_traces, cache_path, indices=None, chunk_size=10000):
         progress_bar = tqdm(total=2*trace_count)
         for chunk_idx in range(trace_count//chunk_size):
             traces_chunk = np.array(traces[chunk_idx*chunk_size:(chunk_idx+1)*chunk_size, :]).astype(np.float32)
-            traces_chunk = traces_chunk[np.intersect1d(np.arange(chunk_idx*chunk_size:(chunk_idx+1)*chunk_size), indices), :]
+            mask = (indices >= chunk_idx * chunk_size) & (indices < (chunk_idx + 1) * chunk_size)
+            selected_indices = indices[mask] - (chunk_idx * chunk_size)
+            traces_chunk = traces_chunk[selected_indices, :]
             mean = (count/(count+len(traces_chunk)))*mean + (chunk_size/(count+len(traces_chunk)))*traces_chunk.mean(axis=0)
-            count += chunk_size
-            progress_bar.update(chunk_size)
+            count += len(traces_chunk)
+            progress_bar.update(len(traces_chunk))
         for chunk_idx in range(trace_count//chunk_size):
             traces_chunk = np.array(traces[chunk_idx*chunk_size:(chunk_idx+1)*chunk_size, :]).astype(np.float32)
-            traces_chunk = traces_chunk[np.intersect1d(np.arange(chunk_idx*chunk_size:(chunk_idx+1)*chunk_size), indices), :]
+            mask = (indices >= chunk_idx * chunk_size) & (indices < (chunk_idx + 1) * chunk_size)
+            selected_indices = indices[mask] - (chunk_idx * chunk_size)
+            traces_chunk = traces_chunk[selected_indices, :]
             var = (count/(count+len(traces_chunk)))*var + (chunk_size/(count+len(traces_chunk)))*((traces_chunk-mean)**2).mean(axis=0)
-            count += chunk_size
-            progress_bar.update(chunk_size)
+            count += len(traces_chunk)
+            progress_bar.update(len(traces_chunk))
         std = np.sqrt(var)
         np.save(cache_path, np.stack([mean, std]))
     elif worker_id > 0:
