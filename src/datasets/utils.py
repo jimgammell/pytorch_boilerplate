@@ -11,7 +11,7 @@ def get_trace_sample_stats(_traces, cache_path, chunk_size=100):
     if not os.path.exists(cache_path):
         with open(cache_lock_path, 'w') as _: pass
         try:
-            traces = _traces.squeeze()
+            traces = _traces
             if isinstance(traces, torch.Tensor):
                 traces = traces.numpy()
             trace_count, trace_dim = traces.shape
