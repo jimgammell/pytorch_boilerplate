@@ -145,7 +145,7 @@ class _ASCADv1(Dataset):
                 self.data_file['traces'], self.data_file['metadata']['plaintext'], self.data_file['metadata']['key'], self.data_file['metadata']['masks'], store_in_ram=False # type: ignore
             )
         self.aes_sbox = torch.from_numpy(AES_SBOX)
-        self.mean, self.std = get_trace_sample_stats(self.data.traces, self.stats_cache_path)
+        self.mean, self.std = get_trace_sample_stats(self.data.traces, self.stats_cache_path, indices=self.PROFILE_INDICES)
         assert self.TRACE_SHAPE is not None
         self.mean = torch.from_numpy(self.mean).reshape(*self.TRACE_SHAPE).to(torch.float)
         self.std = torch.from_numpy(self.std).reshape(*self.TRACE_SHAPE).to(torch.float).clamp_(min=1e-6)
@@ -206,7 +206,7 @@ class ASCADv1_Fixed(_ASCADv1):
 class ASCADv1_Var(_ASCADv1):
     DATABASE_SHAPE = (300000, 250000)
     TRACE_SHAPE = (1, 250000)
-    PROFILE_INDICES = np.arange(2, 300000, 3, dtype=np.int64)
-    ATTACK_INDICES = np.concatenate([np.arange(0, 300000, 3, dtype=np.int64), np.arange(1, 300000, 3, dtype=np.int64)])
+    PROFILE_INDICES = np.concatenate([np.arange(0, 300000, 3, dtype=np.int64), np.arange(1, 300000, 3, dtype=np.int64)])
+    ATTACK_INDICES = np.arange(2, 300000, 3, dtype=np.int64)
     DATABASE_FILENAME = r'atmega8515-raw-traces.h5'
     STATS_CACHE_FILENAME = r'ascadv1_var_stats_cache.npy'
