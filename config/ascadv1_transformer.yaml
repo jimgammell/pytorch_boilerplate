@@ -10,12 +10,12 @@ default_model_config:
   output_head_count: 16
   output_head_classes: 256
 default_training_config:
-  training_steps: 50000
+  training_steps: 5000
   base_lr: 1.e-4
   lr_scheduler_name: cosine_decay
   lr_scheduler_kwargs:
-    warmup_steps: 5000
-    const_steps: 5000
+    warmup_steps: 500
+    const_steps: 500
     final_lr_prop: 0.1
   beta_1: 0.9
   beta_2: 0.99

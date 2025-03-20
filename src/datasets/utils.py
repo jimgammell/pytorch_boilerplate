@@ -9,7 +9,7 @@ from torch.utils.data import get_worker_info
 
 def get_trace_sample_stats(_traces, cache_path, indices=None, chunk_size=10000):
     if indices is None:
-        indices = np.arange(len(traces))
+        indices = np.arange(len(_traces))
     worker_info = get_worker_info()
     if worker_info is None:
         worker_id = -1
@@ -19,12 +19,11 @@ def get_trace_sample_stats(_traces, cache_path, indices=None, chunk_size=10000):
         traces = _traces
         if isinstance(traces, torch.Tensor):
             traces = traces.numpy()
-        trace_count = len(indices)
-        _, trace_dim = traces.shape
+        trace_count, trace_dim = traces.shape
         mean = np.zeros((trace_dim,), dtype=np.float32)
         var = np.zeros((trace_dim,), dtype=np.float32)
         count = 0
-        progress_bar = tqdm(total=2*trace_count)
+        progress_bar = tqdm(total=2*len(indices))
         for chunk_idx in range(trace_count//chunk_size):
             traces_chunk = np.array(traces[chunk_idx*chunk_size:(chunk_idx+1)*chunk_size, :]).astype(np.float32)
             mask = (indices >= chunk_idx * chunk_size) & (indices < (chunk_idx + 1) * chunk_size)
