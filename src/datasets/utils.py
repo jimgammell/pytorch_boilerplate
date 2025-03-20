@@ -16,6 +16,7 @@ def get_trace_sample_stats(_traces, cache_path, indices=None, chunk_size=100):
     else:
         worker_id = worker_info.id
     if not(os.path.exists(cache_path)) and worker_id <= 0:
+        traces = _traces
         if isinstance(traces, torch.Tensor):
             traces = traces.numpy()
         trace_count = len(indices)
