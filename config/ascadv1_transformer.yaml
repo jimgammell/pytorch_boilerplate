@@ -34,4 +34,4 @@ datamodule_config:
   prefetch_factor: 1
 dataset_config:
   target: subbytes
-  store_in_ram: true
+  store_in_ram: false

@@ -24,3 +24,4 @@ def plot_training_curves(training_curves: Dict[str, Tuple[NDArray, NDArray]], sa
     axes[2].legend()
     fig.tight_layout()
     fig.savefig(os.path.join(save_dir, 'training_curves.png'), **SAVEFIG_KWARGS)
+    plt.close(fig)

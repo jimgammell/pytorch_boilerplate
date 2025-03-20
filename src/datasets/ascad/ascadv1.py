@@ -130,7 +130,6 @@ class _ASCADv1(Dataset):
         self.stats_cache_path = os.path.join(self.root, self.STATS_CACHE_FILENAME)
         self.needs_to_setup = True
         self.indices = self.PROFILE_INDICES if self.train else self.ATTACK_INDICES
-        print(1)
         if self.store_in_ram:
             _init_shared_dataset(self.database_path)
     
@@ -143,7 +142,7 @@ class _ASCADv1(Dataset):
         else:
             self.data_file = h5py.File(self.database_path, 'r')
             self.data = _Database(
-                self.data_file['traces'], self.data_file['plaintext'], self.data_file['metadata']['key'], self.data_file['metadata']['masks'], store_in_ram=False # type: ignore
+                self.data_file['traces'], self.data_file['metadata']['plaintext'], self.data_file['metadata']['key'], self.data_file['metadata']['masks'], store_in_ram=False # type: ignore
             )
         self.aes_sbox = torch.from_numpy(AES_SBOX)
         self.mean, self.std = get_trace_sample_stats(self.data.traces, self.stats_cache_path)
