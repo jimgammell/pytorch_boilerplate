@@ -45,11 +45,11 @@ def load(dataset_name: Union[str, AVAILABLE_DATASETS], **kwargs) -> Tuple[Datase
         test_dataset = ASCADv1_Fixed(root, train=False, **kwargs)
     elif dataset_name == AVAILABLE_DATASETS.ASCADv1_Var:
         from .ascad.ascadv1 import ASCADv1_Var
-        train_dataset = ASCADv1_Var(root, **kwargs)
-        test_dataset = None
+        train_dataset = ASCADv1_Var(root, train=True, **kwargs)
+        test_dataset = ASCADv1_Var(root, train=False, **kwargs)
     elif dataset_name == AVAILABLE_DATASETS.ASCADv2:
         from .ascad.ascadv2 import ASCADv2
-        train_dataset = ASCADv2(root, **kwargs)
+        train_dataset = ASCADv2(root, train=True, **kwargs)
         test_dataset = None
     else:
         assert False
