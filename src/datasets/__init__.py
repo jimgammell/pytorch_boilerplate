@@ -33,6 +33,7 @@ def load(dataset_name: Union[str, AVAILABLE_DATASETS], **kwargs) -> Tuple[Datase
     if isinstance(dataset_name, str):
         dataset_name = AVAILABLE_DATASETS(dataset_name)
     root = get_root(dataset_name)
+    assert root is not None
     if dataset_name == AVAILABLE_DATASETS.MNIST:
         raise NotImplementedError
     elif dataset_name == AVAILABLE_DATASETS.IMAGENET:
