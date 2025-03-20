@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from torch.utils.data import get_worker_info
 
-def get_trace_sample_stats(_traces, cache_path, indices=None, chunk_size=100):
+def get_trace_sample_stats(_traces, cache_path, indices=None, chunk_size=10000):
     if indices is None:
         indices = np.arange(len(traces))
     worker_info = get_worker_info()
@@ -27,12 +27,14 @@ def get_trace_sample_stats(_traces, cache_path, indices=None, chunk_size=100):
         progress_bar = tqdm(total=2*trace_count)
         for chunk_idx in range(trace_count//chunk_size):
             traces_chunk = np.array(traces[chunk_idx*chunk_size:(chunk_idx+1)*chunk_size, :]).astype(np.float32)
-            mean = (count/(count+chunk_size))*mean + (chunk_size/(count+chunk_size))*traces_chunk.mean(axis=0)
+            traces_chunk = traces_chunk[np.intersect1d(np.arange(chunk_idx*chunk_size:(chunk_idx+1)*chunk_size), indices), :]
+            mean = (count/(count+len(traces_chunk)))*mean + (chunk_size/(count+len(traces_chunk)))*traces_chunk.mean(axis=0)
             count += chunk_size
             progress_bar.update(chunk_size)
         for chunk_idx in range(trace_count//chunk_size):
             traces_chunk = np.array(traces[chunk_idx*chunk_size:(chunk_idx+1)*chunk_size, :]).astype(np.float32)
-            var = (count/(count+chunk_size))*var + (chunk_size/(count+chunk_size))*((traces_chunk-mean)**2).mean(axis=0)
+            traces_chunk = traces_chunk[np.intersect1d(np.arange(chunk_idx*chunk_size:(chunk_idx+1)*chunk_size), indices), :]
+            var = (count/(count+len(traces_chunk)))*var + (chunk_size/(count+len(traces_chunk)))*((traces_chunk-mean)**2).mean(axis=0)
             count += chunk_size
             progress_bar.update(chunk_size)
         std = np.sqrt(var)
