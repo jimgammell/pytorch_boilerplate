@@ -1,4 +1,5 @@
 import os
+from multiprocessing import current_process
 
 from tqdm import tqdm
 import numpy as np
@@ -6,8 +7,9 @@ import torch
 
 def get_trace_sample_stats(_traces, cache_path, chunk_size=100):
     cache_lock_path = cache_path+'.lock'
-    while os.path.exists(cache_lock_path):
-        pass
+    if not current_process().name == 'MainProcess':
+        while os.path.exists(cache_lock_path):
+            pass
     if not os.path.exists(cache_path):
         with open(cache_lock_path, 'w') as _: pass
         try:
