@@ -63,6 +63,7 @@ def init_logger(print: bool = True, logfile: Optional[str] = None, level: int = 
     class StreamToLogger:
         def __init__(self, log_func: Callable[[str], None]):
             self.log_func = log_func
+            self.encoding = None
         
         def write(self, message: str):
             if message.strip():
