@@ -29,7 +29,8 @@ def get_trace_sample_stats(_traces, cache_path, indices=None, chunk_size=10000):
             mask = (indices >= chunk_idx * chunk_size) & (indices < (chunk_idx + 1) * chunk_size)
             selected_indices = indices[mask] - (chunk_idx * chunk_size)
             traces_chunk = traces_chunk[selected_indices, :]
-            mean = (count/(count+len(traces_chunk)))*mean + (chunk_size/(count+len(traces_chunk)))*traces_chunk.mean(axis=0)
+            if len(traces_chunk) > 0:
+                mean = (count/(count+len(traces_chunk)))*mean + (chunk_size/(count+len(traces_chunk)))*traces_chunk.mean(axis=0)
             count += len(traces_chunk)
             progress_bar.update(len(traces_chunk))
         for chunk_idx in range(trace_count//chunk_size):
@@ -37,7 +38,8 @@ def get_trace_sample_stats(_traces, cache_path, indices=None, chunk_size=10000):
             mask = (indices >= chunk_idx * chunk_size) & (indices < (chunk_idx + 1) * chunk_size)
             selected_indices = indices[mask] - (chunk_idx * chunk_size)
             traces_chunk = traces_chunk[selected_indices, :]
-            var = (count/(count+len(traces_chunk)))*var + (chunk_size/(count+len(traces_chunk)))*((traces_chunk-mean)**2).mean(axis=0)
+            if len(traces_chunk) > 0:
+                var = (count/(count+len(traces_chunk)))*var + (chunk_size/(count+len(traces_chunk)))*((traces_chunk-mean)**2).mean(axis=0)
             count += len(traces_chunk)
             progress_bar.update(len(traces_chunk))
         std = np.sqrt(var)

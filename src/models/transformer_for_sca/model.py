@@ -60,12 +60,18 @@ class Transformer(BaseModule):
                     no_decay.append(module.w3.bias)
             elif isinstance(module, AttentionPoolingLayer):
                 yes_decay.append(module.to_kv.weight)
-                yes_decay.append(module.to_out.weight)
                 no_decay.append(module.pool_queries)
                 if module.to_kv.bias is not None:
                     no_decay.append(module.to_kv.bias)
-                if module.to_out.bias is not None:
-                    no_decay.append(module.to_out.bias)
+                if self.config.shared_head:
+                    yes_decay.append(module.to_out.weight)
+                    if module.to_out.bias is not None:
+                        no_decay.append(module.to_out.bias)
+                else:
+                    for head in module.to_out:
+                        yes_decay.append(head.weight)
+                        if head.bias is not None:
+                            no_decay.append(head.bias)
             elif isinstance(module, Patchifier):
                 no_decay.append(module.patch_embedding.weight)
                 if module.patch_embedding.bias is not None:

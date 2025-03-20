@@ -77,11 +77,21 @@ class AttentionPoolingLayer(BaseModule):
         self.head_dim = self.config.embedding_dim // self.config.attn_head_count
         self.pool_queries = nn.Parameter(torch.randn(1, self.config.output_head_count, self.config.embedding_dim))
         self.to_kv = nn.Linear(self.config.embedding_dim, 2*self.config.embedding_dim, bias=False)
-        self.to_out = nn.Linear(self.config.embedding_dim, self.config.output_head_classes, bias=self.config.bias)
+        if self.config.shared_head:
+            self.to_out = nn.Linear(self.config.embedding_dim, self.config.output_head_classes, bias=self.config.bias)
+            nn.init.xavier_uniform_(self.to_out.weight)
+            if self.config.bias:
+                nn.init.constant_(self.to_out.bias, 0)
+        else:
+            self.to_out = nn.ModuleList([
+                nn.Linear(self.config.embedding_dim, self.config.output_head_classes, bias=self.config.bias)
+                for _ in range(self.config.output_head_count)
+            ])
+            for head in self.to_out:
+                nn.init.xavier_uniform_(head.weight)
+                if self.config.bias:
+                    nn.init.constant_(head.bias, 0)
         nn.init.xavier_uniform_(self.to_kv.weight)
-        nn.init.xavier_uniform_(self.to_out.weight)
-        if self.config.bias:
-            nn.init.constant_(self.to_out.bias, 0)
     
     def forward(self, x):
         batch_size, token_count, embedding_dim = x.shape
@@ -92,7 +102,13 @@ class AttentionPoolingLayer(BaseModule):
         )
         pre_out = nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=0, is_causal=False)
         pre_out = pre_out.transpose(1, 2).contiguous().view(batch_size, self.config.output_head_count, embedding_dim)
-        logits = self.to_out(pre_out)
+        if self.config.shared_head:
+            logits = self.to_out(pre_out)
+        else:
+            logits = []
+            for head, token in zip(self.to_out, pre_out.transpose(0, 1)):
+                logits.append(head(token))
+            logits = torch.stack(logits, dim=1)
         return logits
 
 class Patchifier(BaseModule):

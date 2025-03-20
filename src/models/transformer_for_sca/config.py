@@ -13,6 +13,7 @@ class TransformerConfig:
     rescale_norm_outputs: bool = True
     output_head_count: int = 16
     output_head_classes: int = 256
+    shared_head: bool = True
 
     def __post_init__(self):
         assert isinstance(self.patch_size, int)
@@ -25,6 +26,7 @@ class TransformerConfig:
         assert isinstance(self.rescale_norm_outputs, bool)
         assert isinstance(self.output_head_count, int)
         assert isinstance(self.output_head_classes, int)
+        assert isinstance(self.shared_head, bool)
         assert 0 < self.patch_size
         assert 0 < self.layer_count
         assert 0 < self.attn_head_count

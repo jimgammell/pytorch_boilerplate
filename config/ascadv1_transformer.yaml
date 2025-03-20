@@ -9,6 +9,7 @@ default_model_config:
   rescale_norm_outputs: false
   output_head_count: 16
   output_head_classes: 256
+  shared_head: false
 default_training_config:
   training_steps: 5000
   base_lr: 1.e-4
