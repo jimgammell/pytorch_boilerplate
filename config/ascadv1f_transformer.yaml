@@ -12,11 +12,12 @@ default_model_config:
   shared_head: true
 default_training_config:
   training_steps: 5000
-  base_lr: 5.e-4
+  base_lr: 1.e-3
   lr_scheduler_name: cosine_decay
   lr_scheduler_kwargs:
     warmup_steps: 500
     const_steps: 0
+    final_lr_prop: 0.01
   beta_1: 0.9
   beta_2: 0.99
   eps: 1.e-8
