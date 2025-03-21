@@ -16,14 +16,14 @@ default_training_config:
   lr_scheduler_name: cosine_decay
   lr_scheduler_kwargs:
     warmup_steps: 500
-    const_steps: 500
+    const_steps: 0
   beta_1: 0.9
   beta_2: 0.99
   eps: 1.e-8
   weight_decay: 1.e-4
   grad_clip: 1.0
   dtype: bf16-mixed
-  compile: false
+  compile: true
 datamodule_config:
   val_prop: 0.1
   train_batch_size: 512

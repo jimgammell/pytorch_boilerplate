@@ -33,7 +33,7 @@ class SupervisedClassificationConfig:
         assert self.training_steps > 0
         assert 0 < self.base_lr and isfinite(self.base_lr)
         assert all(isinstance(x, str) for x in self.lr_scheduler_kwargs)
-        assert 0 < self.beta_1 < 1
+        assert 0 <= self.beta_1 < 1
         assert 0 < self.beta_2 < 1
         assert 0 < self.eps and isfinite(self.eps)
         assert 0 <= self.weight_decay and isfinite(self.weight_decay)
