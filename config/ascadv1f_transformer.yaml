@@ -9,10 +9,10 @@ default_model_config:
   rescale_norm_outputs: false
   output_head_count: 16
   output_head_classes: 256
-  shared_head: false
+  shared_head: true
 default_training_config:
   training_steps: 5000
-  base_lr: 1.e-4
+  base_lr: 5.e-4
   lr_scheduler_name: cosine_decay
   lr_scheduler_kwargs:
     warmup_steps: 500
