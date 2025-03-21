@@ -1,6 +1,7 @@
 from typing import Optional
 from math import sqrt, ceil
 
+import numpy as np
 import torch
 from torch import nn
 from rotary_embedding_torch import RotaryEmbedding
@@ -52,11 +53,12 @@ class AttentionLayer(BaseModule):
         return out
 
 class FeedForwardLayer(BaseModule):
-    def __init__(self, config: TransformerConfig):
+    def __init__(self, config: TransformerConfig, output_dims: Optional[int] = None):
         super().__init__()
         self.config = config
+        self.output_dims = output_dims
         self.w12 = nn.Linear(self.config.embedding_dim, 2*self.config.embedding_dim, bias=self.config.bias)
-        self.w3 = nn.Linear(self.config.embedding_dim, self.config.embedding_dim, bias=self.config.bias)
+        self.w3 = nn.Linear(self.config.embedding_dim, self.output_dims or self.config.embedding_dim, bias=self.config.bias)
         self.dropout = nn.Dropout(self.config.dropout)
         nn.init.xavier_uniform_(self.w12.weight)
         nn.init.xavier_uniform_(self.w3.weight)
@@ -71,20 +73,27 @@ class FeedForwardLayer(BaseModule):
         return out
 
 class AttentionPoolingLayer(BaseModule):
-    def __init__(self, config: TransformerConfig):
+    def __init__(self, config: TransformerConfig, output_dim: Optional[int] = None):
         super().__init__()
         self.config = config
+        self.output_dim = output_dim
         self.head_dim = self.config.embedding_dim // self.config.attn_head_count
-        self.pool_queries = nn.Parameter(torch.randn(1, self.config.output_head_count, self.config.embedding_dim))
+        self.rotary_emb = RotaryEmbedding(dim=self.head_dim)
+        self.output_token_count = (
+            self.config.output_head_count if self.config.head_type == 'simple-shared'
+            else 4*self.config.output_head_count+1 if self.config.head_type == 'ascadv1'
+            else -1
+        )
+        self.pool_queries = nn.Parameter(torch.randn(1, self.output_token_count, self.config.embedding_dim))
         self.to_kv = nn.Linear(self.config.embedding_dim, 2*self.config.embedding_dim, bias=False)
         if self.config.shared_head:
-            self.to_out = nn.Linear(self.config.embedding_dim, self.config.output_head_classes, bias=self.config.bias)
+            self.to_out = nn.Linear(self.config.embedding_dim, self.output_dim or self.config.embedding_dim, bias=self.config.bias)
             nn.init.xavier_uniform_(self.to_out.weight)
             if self.config.bias:
                 nn.init.constant_(self.to_out.bias, 0)
         else:
             self.to_out = nn.ModuleList([
-                nn.Linear(self.config.embedding_dim, self.config.output_head_classes, bias=self.config.bias)
+                nn.Linear(self.config.embedding_dim, self.output_dim or self.config.output_head_classes, bias=self.config.bias)
                 for _ in range(self.config.output_head_count)
             ])
             for head in self.to_out:
@@ -100,8 +109,9 @@ class AttentionPoolingLayer(BaseModule):
         q, k, v = map(
             lambda x: x.view(batch_size, -1, self.config.attn_head_count, self.head_dim).transpose(1, 2), (q, *kv)
         )
+        k = self.rotary_emb.rotate_queries_or_keys(k)
         pre_out = nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=0, is_causal=False)
-        pre_out = pre_out.transpose(1, 2).contiguous().view(batch_size, self.config.output_head_count, embedding_dim)
+        pre_out = pre_out.transpose(1, 2).contiguous().view(batch_size, self.output_token_count, embedding_dim)
         if self.config.shared_head:
             logits = self.to_out(pre_out)
         else:
@@ -116,11 +126,24 @@ class Patchifier(BaseModule):
         super().__init__()
         self.config = config
         self.patch_embedding = nn.Conv1d(1, self.config.embedding_dim, kernel_size=self.config.patch_size, stride=self.config.patch_size, bias=self.config.bias)
+        self.dropout = nn.Dropout(self.config.dropout)
     
     def forward(self, x):
-        batch_size, _, dim = x.shape
+        batch_size, token_count, dim = x.shape
         padding = self.config.patch_size*ceil(dim/self.config.patch_size) - dim
         if padding > 0:
             x = torch.cat([x, torch.zeros(batch_size, 1, padding, dtype=x.dtype, device=x.device)])
+        if self.training:
+            if self.config.dropword > 0:
+                mask = torch.rand((batch_size, token_count), device=x.device) > self.config.dropword
+                mask = mask.reshape(batch_size, token_count, 1).to(x.dtype)
+                x = x * mask
+            if self.config.input_noise_std > 0:
+                x = x + self.config.input_noise_std*torch.randn_like(x)
+            if self.config.input_jitter > 0:
+                shifts = np.random.randint(-self.config.input_jitter, self.config.input_jitter+1, (batch_size,))
+                for idx, shift in enumerate(shifts):
+                    x[idx] = torch.roll(x[idx], shifts=shift, dims=-1)
         x = self.patch_embedding(x).transpose(1, 2)
+        x = self.dropout(x)
         return x

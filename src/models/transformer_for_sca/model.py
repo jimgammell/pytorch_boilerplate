@@ -6,6 +6,7 @@ from torch import nn
 from ..base_module import BaseModule
 from .config import TransformerConfig
 from .building_blocks import *
+from ..sca_blocks.ascadv1_head import ASCADv1_Head
 
 class TransformerLayer(nn.Module):
     def __init__(self, config: TransformerConfig, layer_num: Optional[int] = None):
@@ -22,6 +23,24 @@ class TransformerLayer(nn.Module):
         x = x + self.fnn(self.pre_fnn_norm(x))
         return x
 
+class Head(nn.Module):
+    def __init__(self, config: TransformerConfig):
+        super().__init__()
+        self.config = config
+        self.pre_attn_norm = NormLayer(self.config, self.config.layer_count+1)
+        self.attn = AttentionPoolingLayer(self.config, output_dim=self.config.output_head_classes)
+        if self.config.head_type == 'simple-shared':
+            self.to_logits = nn.Identity()
+        elif self.config.head_type == 'ascadv1':
+            self.to_logits = ASCADv1_Head()
+        else:
+            assert False
+    
+    def forward(self, x):
+        x = self.attn(self.pre_attn_norm(x))
+        x = self.to_logits(x)
+        return x
+
 class Transformer(BaseModule):
     def __init__(self, config: TransformerConfig):
         super().__init__()
@@ -30,13 +49,13 @@ class Transformer(BaseModule):
         self.transformer_layers = nn.ModuleList([
             TransformerLayer(self.config, layer_num) for layer_num in range(1, self.config.layer_count+1)
         ])
-        self.heads = AttentionPoolingLayer(self.config)
+        self.head = Head(self.config) #self.heads = AttentionPoolingLayer(self.config)
     
     def forward(self, x):
         x = self.patchifier(x)
         for transformer_layer in self.transformer_layers:
             x = transformer_layer(x)
-        x = self.heads(x)
+        x = self.head(x) #self.heads(x)
         return x
     
     def get_params_based_on_should_weight_decay(self) -> Tuple[List[nn.Parameter], List[nn.Parameter]]:
