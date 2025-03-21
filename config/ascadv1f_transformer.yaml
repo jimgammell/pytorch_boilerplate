@@ -3,8 +3,8 @@ default_model_config:
   layer_count: 3
   attn_head_count: 12
   embedding_dim: 768
-  dropout: 0.0
-  bias: true
+  dropout: 0.1
+  bias: false
   norm_eps: 1.e-5
   rescale_norm_outputs: false
   output_head_count: 16
@@ -20,7 +20,7 @@ default_training_config:
   beta_1: 0.9
   beta_2: 0.99
   eps: 1.e-8
-  weight_decay: 0.0
+  weight_decay: 1.e-4
   grad_clip: 1.0
   dtype: bf16-mixed
   compile: false

@@ -66,7 +66,7 @@ def gf256_prod(a: NDArray[np.uint8], b: NDArray[np.uint8]) -> NDArray[np.uint8]:
     assert a.shape == b.shape
     assert a.dtype == b.dtype
     rv = np.zeros_like(a)
-    indices = np.logical_or(a == 0, b == 0)
+    indices = ~np.logical_or(a == 0, b == 0)
     rv[indices] = GF256_ALOG[(GF256_LOG[a] + GF256_LOG[b])%255][indices]
     return rv
 

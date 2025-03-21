@@ -1,5 +1,5 @@
 default_model_config:
-  patch_size: 250
+  patch_size: 10000
   layer_count: 3
   attn_head_count: 12
   embedding_dim: 768
