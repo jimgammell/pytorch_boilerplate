@@ -5,7 +5,7 @@ default_model_config:
   embedding_dim: 768
   dropout: 0.1
   dropword: 0.0
-  input_noise_std: 0.1
+  input_noise_std: 0.0
   input_jitter: 0
   bias: false
   norm_eps: 1.e-5
@@ -13,6 +13,7 @@ default_model_config:
   output_head_count: 16
   output_head_classes: 256
   shared_head: true
+  head_type: ascadv1
 default_training_config:
   training_steps: 5000
   base_lr: 5.e-4
@@ -24,7 +25,7 @@ default_training_config:
   beta_1: 0.9
   beta_2: 0.99
   eps: 1.e-8
-  weight_decay: 1.e-2
+  weight_decay: 1.e-4
   grad_clip: 1.0
   dtype: bf16-mixed
   compile: true
