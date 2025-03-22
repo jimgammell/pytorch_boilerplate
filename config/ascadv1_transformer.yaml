@@ -1,9 +1,10 @@
 default_model_config:
-  patch_size: 2500
+  patch_size: 1000
   layer_count: 3
   attn_head_count: 12
   embedding_dim: 768
   dropout: 0.1
+  input_dropout: 0.0
   dropword: 0.0
   input_noise_std: 0.0
   input_jitter: 0
@@ -15,7 +16,7 @@ default_model_config:
   shared_head: true
   head_type: ascadv1
 default_training_config:
-  training_steps: 5000
+  training_steps: 10000
   base_lr: 5.e-4
   lr_scheduler_name: cosine_decay
   lr_scheduler_kwargs:

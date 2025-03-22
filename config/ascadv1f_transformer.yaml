@@ -4,6 +4,7 @@ default_model_config:
   attn_head_count: 12
   embedding_dim: 768
   dropout: 0.1
+  input_dropout: 0.0
   dropword: 0.0
   input_noise_std: 0.0
   input_jitter: 0

@@ -126,7 +126,7 @@ class Patchifier(BaseModule):
         super().__init__()
         self.config = config
         self.patch_embedding = nn.Conv1d(1, self.config.embedding_dim, kernel_size=self.config.patch_size, stride=self.config.patch_size, bias=self.config.bias)
-        self.dropout = nn.Dropout(self.config.dropout)
+        self.dropout = nn.Dropout(self.config.input_dropout)
     
     def forward(self, x):
         batch_size, token_count, dim = x.shape

@@ -10,6 +10,7 @@ class TransformerConfig:
     attn_head_count: int = 12
     embedding_dim: int = 768
     dropout: float = 0.1
+    input_dropout: float = 0.1
     dropword: float = 0.1
     input_noise_std: float = 0.1
     input_jitter: int = 0
@@ -27,6 +28,7 @@ class TransformerConfig:
         assert isinstance(self.attn_head_count, int)
         assert isinstance(self.embedding_dim, int)
         assert isinstance(self.dropout, float)
+        assert isinstance(self.input_dropout, float)
         assert isinstance(self.dropword, float)
         assert isinstance(self.bias, bool)
         assert isinstance(self.norm_eps, float)
@@ -39,8 +41,9 @@ class TransformerConfig:
         assert 0 < self.layer_count
         assert 0 < self.attn_head_count
         assert 0 < self.embedding_dim
-        assert 0 <= self.dropout and isfinite(self.dropout)
-        assert 0 <= self.dropword and isfinite(self.dropword)
+        assert 0 <= self.dropout < 1
+        assert 0 <= self.input_dropout < 1
+        assert 0 <= self.dropword < 1
         assert 0 < self.norm_eps and isfinite(self.norm_eps)
         assert 0 < self.output_head_count
         assert 0 < self.output_head_classes
