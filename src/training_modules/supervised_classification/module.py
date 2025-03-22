@@ -60,17 +60,17 @@ class SupervisedClassificationModule(lightning.LightningModule):
         if logits.dim() == 2: # single task learning
             batch_size, class_count = logits.shape
             assert (batch_size,) == y.shape
-            loss = nn.functional.cross_entropy(logits, y, label_smoothing=0.1)
+            loss = nn.functional.cross_entropy(logits, y)
         elif logits.dim() == 3: # multitask learning
             batch_size, task_count, class_count = logits.shape
             assert (batch_size, task_count) == y.shape
             logits = logits.reshape(batch_size*task_count, class_count)
             y = y.reshape(batch_size*task_count)
-            loss = nn.functional.cross_entropy(logits, y, label_smoothing=0.1)
+            loss = nn.functional.cross_entropy(logits, y)
         else:
             assert False
         with torch.no_grad():
-            per_task_loss = nn.functional.cross_entropy(logits, y, label_smoothing=0.1, reduction='none').reshape(batch_size, task_count).mean(dim=0)
+            per_task_loss = nn.functional.cross_entropy(logits, y, reduction='none').reshape(batch_size, task_count).mean(dim=0)
             per_task_acc = get_accuracy(logits, y, avg_result=False).reshape(batch_size, task_count).mean(dim=0)
             per_task_rank = get_rank(logits, y, avg_result=False).reshape(batch_size, task_count).mean(dim=0)
             for byte_idx in range(task_count):

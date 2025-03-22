@@ -3,10 +3,10 @@ default_model_config:
   layer_count: 3
   attn_head_count: 12
   embedding_dim: 768
-  dropout: 0.1
-  input_dropout: 0.1
-  dropword: 0.1
-  input_noise_std: 0.1
+  dropout: 0.0
+  input_dropout: 0.0
+  dropword: 0.0
+  input_noise_std: 0.0
   input_jitter: 0
   bias: false
   norm_eps: 1.e-5
@@ -16,7 +16,7 @@ default_model_config:
   shared_head: true
   head_type: simple-shared
 default_training_config:
-  training_steps: 10000
+  training_steps: 5000
   base_lr: 1.e-3
   lr_scheduler_name: cosine_decay
   lr_scheduler_kwargs:
@@ -26,7 +26,7 @@ default_training_config:
   beta_1: 0.9
   beta_2: 0.99
   eps: 1.e-8
-  weight_decay: 1.e-4
+  weight_decay: 0.0
   grad_clip: 1.0
   dtype: bf16-mixed
   compile: true
