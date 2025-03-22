@@ -64,7 +64,7 @@ class SupervisedClassificationTrainer:
                     can_run = False
                 elif training_complete(save_dir):
                     logger.info(f'There is a complete trial in {save_dir} with the same hyperparameters as the current trial. Skipping training.')
-                    can_run = False
+                    can_run = True
                 elif not may_resume:
                     logger.error(f'There is a partially-complete trial in {save_dir} with the same hyperparameters as the current trial. Skipping training because may_resume=False.')
                     can_run = False
@@ -83,19 +83,31 @@ class SupervisedClassificationTrainer:
             with open(os.path.join(save_dir, 'trial_config.yaml'), 'w') as f:
                 yaml.dump({'classifier_config': classifier_config_kwargs, 'training_config': training_config_kwargs}, f, default_flow_style=False)
             training_config = SupervisedClassificationConfig(**training_config_kwargs)
-            training_module = SupervisedClassificationModule(
-                self.classifier_name, classifier_config_kwargs, training_config
-            )
-            early_stopping_checkpoint = ModelCheckpoint(monitor='val_rank', mode='min', save_top_k=1, dirpath=save_dir, filename='best_checkpoint')
-            progress_bar = TQDMProgressBar(refresh_rate=1) #10)
-            trainer = LightningTrainer(
-                max_steps=training_config.training_steps,
-                #log_every_n_steps=100,
-                precision=training_config.dtype,
-                logger=TensorBoardLogger(save_dir, name='', version=''),
-                callbacks=[]#[early_stopping_checkpoint, progress_bar]
-            )
-            trainer.fit(training_module, datamodule=self.datamodule, ckpt_path=checkpoint_path)
+            if not training_complete(save_dir):
+                training_module = SupervisedClassificationModule(
+                    self.classifier_name, classifier_config_kwargs, training_config
+                )
+                early_stopping_checkpoint = ModelCheckpoint(monitor='val_rank', mode='min', save_top_k=1, dirpath=save_dir, filename='best_checkpoint')
+                progress_bar = TQDMProgressBar(refresh_rate=1) #10)
+                trainer = LightningTrainer(
+                    max_steps=training_config.training_steps,
+                    #log_every_n_steps=100,
+                    precision=training_config.dtype,
+                    logger=TensorBoardLogger(save_dir, name='', version=''),
+                    callbacks=[]#[early_stopping_checkpoint, progress_bar]
+                )
+                trainer.fit(training_module, datamodule=self.datamodule, ckpt_path=checkpoint_path)
+            else:
+                print('Loading trained model.')
+                checkpoint_filename = [x for x in os.listdir(os.path.join(save_dir, 'checkpoints')) if x.split('.')[-1] == 'ckpt'][0]
+                training_module = SupervisedClassificationModule.load_from_checkpoint(os.path.join(save_dir, 'checkpoints', checkpoint_filename))
+                trainer = LightningTrainer(
+                    max_steps=training_config.training_steps,
+                    #log_every_n_steps=100,
+                    precision=training_config.dtype,
+                    logger=TensorBoardLogger(save_dir, name='', version=''),
+                    callbacks=[]#[early_stopping_checkpoint, progress_bar]
+                )
             test_results = trainer.test(training_module, datamodule=self.datamodule, verbose=False)
             logger.info(f'Test results: {test_results}')
             extract_training_curves(save_dir)

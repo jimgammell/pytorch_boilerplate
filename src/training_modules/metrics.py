@@ -1,5 +1,7 @@
 from typing import Callable
+from math import sqrt, ceil
 
+from matplotlib import pyplot as plt
 import numpy as np
 import torch
 from torch import nn
@@ -25,7 +27,7 @@ def get_rank(logits: torch.Tensor, labels: torch.Tensor, avg_result: bool = True
 @torch.no_grad()
 def test_side_channel_attacker(module: LightningModule):
     module.eval()
-    attack_dataloader = module.test_dataloader()
+    attack_dataloader = module.trainer.datamodule.test_dataloader()
     attack_dataloader.dataset.target = [ASCADv1_Targets.KEY, ASCADv1_Targets.PLAINTEXT]
     batch_size = attack_dataloader.batch_size
     trace_count = len(attack_dataloader.dataset)
@@ -49,8 +51,23 @@ def test_side_channel_attacker(module: LightningModule):
     ranks = np.full((trace_count, 16), -1, dtype=np.int16)
     accumulated_predicted_dist = np.ones((16, 256), dtype=np.float32)/256.
     for idx, (logits, key, plaintext) in enumerate(zip(collected_logits, collected_plaintexts, collected_keys)):
-        ranks[idx, :] = get_rank(torch.from_numpy(accumulated_predicted_dist), torch.from_numpy(key), avg_result=False).numpy()
         logits_for_key = logits[:, plaintext ^ AES_INV_SBOX[np.arange(256)]]
         dist_over_key = nn.functional.log_softmax(torch.from_numpy(logits_for_key)).numpy()
         accumulated_predicted_dist += dist_over_key
+        ranks[idx, :] = get_rank(torch.from_numpy(accumulated_predicted_dist), torch.from_numpy(key), avg_result=False).numpy()
     return ranks
+
+def plot_ranks_over_time(output_path, ranks):
+    trace_count, byte_count = ranks.shape
+    col_count = int(sqrt(byte_count))
+    row_count = ceil(byte_count/col_count)
+    fig, axes = plt.subplots(row_count, col_count, figsize=(4*col_count, 4*row_count))
+    axes = axes.flatten()
+    for byte, ax, rank_trace in zip(range(byte_count), axes, ranks):
+        ax.set_xlabel('Traces seen')
+        ax.set_ylabel('Correct key rank')
+        ax.set_xscale('log')
+        ax.set_title(f'Byte: {byte}')
+        ax.plot(np.arange(1, trace_count+1), rank_trace, color='blue')
+    fig.tight_layout()
+    fig.savefig(output_path)

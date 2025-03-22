@@ -58,7 +58,5 @@ def load_training_curves(save_dir):
 def training_complete(save_dir):
     return all((
         os.path.exists(os.path.join(save_dir, 'training_curves.npz')),
-        os.path.exists(os.path.join(save_dir, 'initial_checkpoint.ckpt')),
-        os.path.exists(os.path.join(save_dir, 'final_checkpoint.ckpt')),
         os.path.exists(os.path.join(save_dir, 'trial_config.yaml'))
     ))

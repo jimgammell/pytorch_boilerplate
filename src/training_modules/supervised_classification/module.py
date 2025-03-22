@@ -1,5 +1,6 @@
 from typing import Dict, Any, Tuple
 from dataclasses import dataclass
+import os
 
 import torch
 from torch import nn, optim
@@ -8,7 +9,7 @@ import lightning
 import utils.lr_schedulers as lr_schedulers
 import models
 from .config import SupervisedClassificationConfig
-from ..metrics import get_accuracy, get_rank
+from ..metrics import get_accuracy, get_rank, test_side_channel_attacker, plot_ranks_over_time
 from .focal_cross_entropy import FocalCrossEntropyLoss
 
 @dataclass
@@ -84,6 +85,9 @@ class SupervisedClassificationModule(lightning.LightningModule):
         self.log(f'{log_prefix}_rank', get_rank(logits, y), prog_bar=True, on_epoch=True)
         return loss
     
+    def forward(self, x):
+        return self.classifier(x)
+    
     def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int):
         loss = self.step(batch, batch_idx, log_prefix='train')
         return loss
@@ -95,3 +99,10 @@ class SupervisedClassificationModule(lightning.LightningModule):
     def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int):
         loss = self.step(batch, batch_idx, log_prefix='test')
         return loss
+    
+    def on_test_epoch_end(self, *args):
+        ranks_over_time = test_side_channel_attacker(self)
+        assert self.logger is not None
+        log_dir = self.logger.log_dir
+        assert log_dir is not None
+        plot_ranks_over_time(os.path.join(log_dir, 'ranks_over_time.png'), ranks_over_time)
