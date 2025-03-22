@@ -39,14 +39,14 @@ class AttentionLayer(BaseModule):
         if self.config.bias:
             nn.init.constant_(self.to_out.bias, 0)
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         batch_size, token_count, embedding_dim = x.shape
         qkv = self.to_qkv(x).split(self.config.embedding_dim, dim=2)
         q, k, v = map(
             lambda x: x.view(batch_size, token_count, self.config.attn_head_count, self.head_dim).transpose(1, 2), qkv
         )
         q, k = map(lambda x: self.rotary_emb.rotate_queries_or_keys(x), (q, k))
-        pre_out = nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.config.dropout if self.training else 0, is_causal=False, scale=1/sqrt(self.head_dim))
+        pre_out = nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=self.config.dropout if self.training else 0, is_causal=False, scale=1/sqrt(self.head_dim))
         pre_out = pre_out.transpose(1, 2).contiguous().view(batch_size, token_count, embedding_dim)
         out = self.to_out(pre_out)
         out = self.out_dropout(out)
@@ -102,7 +102,7 @@ class AttentionPoolingLayer(BaseModule):
                     nn.init.constant_(head.bias, 0)
         nn.init.xavier_uniform_(self.to_kv.weight)
     
-    def forward(self, x):
+    def forward(self, x, mask: Optional[torch.Tensor] = None):
         batch_size, token_count, embedding_dim = x.shape
         q = self.pool_queries.expand(batch_size, -1, -1)
         kv = self.to_kv(x).split(self.config.embedding_dim, dim=2)
@@ -110,7 +110,7 @@ class AttentionPoolingLayer(BaseModule):
             lambda x: x.view(batch_size, -1, self.config.attn_head_count, self.head_dim).transpose(1, 2), (q, *kv)
         )
         k = self.rotary_emb.rotate_queries_or_keys(k)
-        pre_out = nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=0, is_causal=False)
+        pre_out = nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0, is_causal=False)
         pre_out = pre_out.transpose(1, 2).contiguous().view(batch_size, self.output_token_count, embedding_dim)
         if self.config.shared_head:
             logits = self.to_out(pre_out)
@@ -133,17 +133,17 @@ class Patchifier(BaseModule):
         padding = self.config.patch_size*ceil(dim/self.config.patch_size) - dim
         if padding > 0:
             x = torch.cat([x, torch.zeros(batch_size, 1, padding, dtype=x.dtype, device=x.device)])
+        mask = None
         if self.training:
-            if self.config.dropword > 0:
-                mask = torch.rand((batch_size, token_count), device=x.device) > self.config.dropword
-                mask = mask.reshape(batch_size, token_count, 1).to(x.dtype)
-                x = x * mask
             if self.config.input_noise_std > 0:
                 x = x + self.config.input_noise_std*torch.randn_like(x)
             if self.config.input_jitter > 0:
                 shifts = np.random.randint(-self.config.input_jitter, self.config.input_jitter+1, (batch_size,))
                 for idx, shift in enumerate(shifts):
                     x[idx] = torch.roll(x[idx], shifts=shift, dims=-1)
+            if self.config.dropword > 0:
+                mask = torch.rand((batch_size, token_count), device=x.device) > self.config.dropword
+                x = x * mask.reshape(batch_size, token_count, 1).to(x.dtype)
         x = self.patch_embedding(x).transpose(1, 2)
         x = self.dropout(x)
-        return x
+        return x, mask

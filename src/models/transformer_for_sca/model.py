@@ -18,8 +18,8 @@ class TransformerLayer(nn.Module):
         self.pre_fnn_norm = NormLayer(self.config, self.layer_num)
         self.fnn = FeedForwardLayer(self.config)
     
-    def forward(self, x):
-        x = x + self.attn(self.pre_attn_norm(x))
+    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        x = x + self.attn(self.pre_attn_norm(x), mask)
         x = x + self.fnn(self.pre_fnn_norm(x))
         return x
 
@@ -36,8 +36,8 @@ class Head(nn.Module):
         else:
             assert False
     
-    def forward(self, x):
-        x = self.attn(self.pre_attn_norm(x))
+    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        x = self.attn(self.pre_attn_norm(x), mask)
         x = self.to_logits(x)
         return x
 
@@ -52,10 +52,10 @@ class Transformer(BaseModule):
         self.head = Head(self.config) #self.heads = AttentionPoolingLayer(self.config)
     
     def forward(self, x):
-        x = self.patchifier(x)
+        x, mask = self.patchifier(x)
         for transformer_layer in self.transformer_layers:
-            x = transformer_layer(x)
-        x = self.head(x) #self.heads(x)
+            x = transformer_layer(x, mask)
+        x = self.head(x, mask) #self.heads(x)
         return x
     
     def get_params_based_on_should_weight_decay(self) -> Tuple[List[nn.Parameter], List[nn.Parameter]]:

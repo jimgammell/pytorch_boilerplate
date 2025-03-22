@@ -69,6 +69,14 @@ class SupervisedClassificationModule(lightning.LightningModule):
             loss = nn.functional.cross_entropy(logits, y, label_smoothing=0.1)
         else:
             assert False
+        with torch.no_grad():
+            per_task_loss = nn.functional.cross_entropy(logits, y, label_smoothing=0.1, reduction='none').reshape(batch_size, task_count).mean(dim=0)
+            per_task_acc = get_accuracy(logits, y, avg_result=False).reshape(batch_size, task_count).mean(dim=0)
+            per_task_rank = get_rank(logits, y, avg_result=False).reshape(batch_size, task_count).mean(dim=0)
+            for byte_idx in range(task_count):
+                self.log(f'{log_prefix}_loss_byte={byte_idx}', per_task_loss[byte_idx], prog_bar=False, on_step=False, on_epoch=True)
+                self.log(f'{log_prefix}_acc_byte={byte_idx}', per_task_acc[byte_idx], prog_bar=False, on_step=False, on_epoch=True)
+                self.log(f'{log_prefix}_rank_byte={byte_idx}', per_task_rank[byte_idx], prog_bar=False, on_step=False, on_epoch=True)
         self.log(f'{log_prefix}_loss', loss, prog_bar=True, on_step=True)
         self.log(f'{log_prefix}_acc', get_accuracy(logits, y), prog_bar=False, on_epoch=True)
         self.log(f'{log_prefix}_rank', get_rank(logits, y), prog_bar=True, on_epoch=True)
