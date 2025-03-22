@@ -9,6 +9,7 @@ import utils.lr_schedulers as lr_schedulers
 import models
 from .config import SupervisedClassificationConfig
 from ..metrics import get_accuracy, get_rank
+from .focal_cross_entropy import FocalCrossEntropyLoss
 
 @dataclass
 class _ModuleHparams:
@@ -30,6 +31,7 @@ class SupervisedClassificationModule(lightning.LightningModule):
         self.classifier = models.load(self.hparams.classifier_name, self.hparams.classifier_kwargs)
         if self.hparams.training_config.compile:
             self.classifier.compile()
+        self.loss = nn.CrossEntropyLoss()
         
     def configure_optimizers(self):
         yes_weight_decay, no_weight_decay = self.classifier.get_params_based_on_should_weight_decay()
@@ -66,7 +68,7 @@ class SupervisedClassificationModule(lightning.LightningModule):
             assert (batch_size, task_count) == y.shape
             logits = logits.reshape(batch_size*task_count, class_count)
             y = y.reshape(batch_size*task_count)
-            loss = nn.functional.cross_entropy(logits, y)
+            loss = self.loss(logits, y) #nn.functional.cross_entropy(logits, y)
         else:
             assert False
         with torch.no_grad():

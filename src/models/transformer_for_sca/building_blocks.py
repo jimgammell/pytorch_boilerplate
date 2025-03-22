@@ -46,6 +46,8 @@ class AttentionLayer(BaseModule):
             lambda x: x.view(batch_size, token_count, self.config.attn_head_count, self.head_dim).transpose(1, 2), qkv
         )
         q, k = map(lambda x: self.rotary_emb.rotate_queries_or_keys(x), (q, k))
+        if mask is not None:
+            mask = mask.reshape(batch_size, 1, 1, token_count).expand(-1, self.config.attn_head_count, token_count, -1)
         pre_out = nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=self.config.dropout if self.training else 0, is_causal=False, scale=1/sqrt(self.head_dim))
         pre_out = pre_out.transpose(1, 2).contiguous().view(batch_size, token_count, embedding_dim)
         out = self.to_out(pre_out)
@@ -110,6 +112,8 @@ class AttentionPoolingLayer(BaseModule):
             lambda x: x.view(batch_size, -1, self.config.attn_head_count, self.head_dim).transpose(1, 2), (q, *kv)
         )
         k = self.rotary_emb.rotate_queries_or_keys(k)
+        if mask is not None:
+            mask = mask.reshape(batch_size, 1, 1, token_count).expand(-1, self.config.attn_head_count, self.config.output_head_count, -1)
         pre_out = nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0, is_causal=False)
         pre_out = pre_out.transpose(1, 2).contiguous().view(batch_size, self.output_token_count, embedding_dim)
         if self.config.shared_head:
@@ -129,7 +133,8 @@ class Patchifier(BaseModule):
         self.dropout = nn.Dropout(self.config.input_dropout)
     
     def forward(self, x):
-        batch_size, token_count, dim = x.shape
+        batch_size, _, dim = x.shape
+        token_count = ceil(dim/self.config.patch_size)
         padding = self.config.patch_size*ceil(dim/self.config.patch_size) - dim
         if padding > 0:
             x = torch.cat([x, torch.zeros(batch_size, 1, padding, dtype=x.dtype, device=x.device)])
@@ -141,9 +146,9 @@ class Patchifier(BaseModule):
                 shifts = np.random.randint(-self.config.input_jitter, self.config.input_jitter+1, (batch_size,))
                 for idx, shift in enumerate(shifts):
                     x[idx] = torch.roll(x[idx], shifts=shift, dims=-1)
-            if self.config.dropword > 0:
-                mask = torch.rand((batch_size, token_count), device=x.device) > self.config.dropword
-                x = x * mask.reshape(batch_size, token_count, 1).to(x.dtype)
         x = self.patch_embedding(x).transpose(1, 2)
+        if self.training and self.config.dropword > 0:
+            mask = torch.rand((batch_size, token_count), device=x.device) > self.config.dropword
+            x = x * mask.reshape(batch_size, token_count, 1).to(x.dtype)
         x = self.dropout(x)
         return x, mask
