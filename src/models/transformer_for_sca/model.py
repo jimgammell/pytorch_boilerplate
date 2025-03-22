@@ -32,7 +32,7 @@ class Head(nn.Module):
         if self.config.head_type == 'simple-shared':
             self.to_logits = nn.Identity()
         elif self.config.head_type == 'ascadv1':
-            self.to_logits = ASCADv1_Head()
+            self.to_logits = ASCADv1_Head(dropout_rate=self.config.head_dropout)
         else:
             assert False
     

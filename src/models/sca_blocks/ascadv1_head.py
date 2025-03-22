@@ -5,9 +5,10 @@ from torch import nn
 from .soft_xor import soft_xor
 
 class ASCADv1_Head(nn.Module):
-    def __init__(self):
+    def __init__(self, dropout_rate: float = 0.1):
         super().__init__()
-        self.dropout = nn.Dropout1d(p=0.0)
+        self.dropout_rate = dropout_rate
+        self.dropout = nn.Dropout1d(p=self.dropout_rate)
 
     def forward(self, x):
         batch_size, token_count, embedding_dim = x.shape

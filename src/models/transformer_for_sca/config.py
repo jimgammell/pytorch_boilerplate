@@ -12,6 +12,7 @@ class TransformerConfig:
     dropout: float = 0.1
     input_dropout: float = 0.1
     dropword: float = 0.1
+    head_dropout: float = 0.1
     input_noise_std: float = 0.1
     input_jitter: int = 0
     bias: bool = False

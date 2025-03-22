@@ -23,6 +23,8 @@ class ASCADv1_Targets(Enum):
     ROUT = 'r_out'
     SUBBYTES_XOR_R = 'subbytes_xor_r'
     SUBBYTES_XOR_ROUT = 'subbytes_xor_rout'
+    KEY = 'key'
+    PLAINTEXT = 'plaintext'
 ASCADv1_Targets_t = Union[ASCADv1_Targets, str]
 
 @dataclass
@@ -171,6 +173,10 @@ class _ASCADv1(Dataset):
             out.append(torch.bitwise_xor(self.aes_sbox[torch.bitwise_xor(key, plaintext).to(torch.long)], r.unsqueeze(0)))
         if ASCADv1_Targets.SUBBYTES_XOR_ROUT in self.target:
             out.append(torch.bitwise_xor(self.aes_sbox[torch.bitwise_xor(key, plaintext).to(torch.long)], r_out.unsqueeze(0)))
+        if ASCADv1_Targets.KEY in self.target:
+            out.append(key)
+        if ASCADv1_Targets.PLAINTEXT in self.target:
+            out.append(plaintext)
         assert len(out) > 0
         out = torch.cat(out)
         return out

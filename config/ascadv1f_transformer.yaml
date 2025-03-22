@@ -6,6 +6,7 @@ default_model_config:
   dropout: 0.1
   input_dropout: 0.1
   dropword: 0.1
+  head_dropout: 0.1
   input_noise_std: 0.1
   input_jitter: 0
   bias: false
@@ -14,7 +15,7 @@ default_model_config:
   output_head_count: 16
   output_head_classes: 256
   shared_head: true
-  head_type: simple-shared
+  head_type: ascadv1
 default_training_config:
   training_steps: 5000
   base_lr: 2.e-3

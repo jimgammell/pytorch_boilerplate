@@ -113,7 +113,7 @@ class AttentionPoolingLayer(BaseModule):
         )
         k = self.rotary_emb.rotate_queries_or_keys(k)
         if mask is not None:
-            mask = mask.reshape(batch_size, 1, 1, token_count).expand(-1, self.config.attn_head_count, self.config.output_head_count, -1)
+            mask = mask.reshape(batch_size, 1, 1, token_count).expand(-1, self.config.attn_head_count, self.output_token_count, -1)
         pre_out = nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0, is_causal=False)
         pre_out = pre_out.transpose(1, 2).contiguous().view(batch_size, self.output_token_count, embedding_dim)
         if self.config.shared_head:
