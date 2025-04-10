@@ -22,7 +22,7 @@ def train_supervised_classifier(args, default_training_config_kwargs, default_mo
 
 def compute_parametric_stats(args):
     assert args.dataset is not None
-    
+    assert False # TODO
 
 def main():
     parser = argparse.ArgumentParser()
