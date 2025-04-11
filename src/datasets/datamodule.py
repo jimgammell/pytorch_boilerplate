@@ -54,6 +54,9 @@ class DataModule(lightning.LightningDataModule):
         val_indices = self.indices[:self.val_length]
         self.train_dataset = Subset(self.base_train_dataset, train_indices)
         self.val_dataset = Subset(self.base_train_dataset, val_indices)
+        if hasattr(self.base_train_dataset, 'enable_data_transforms'):
+            self.train_dataset.enable_data_transforms(set=True, aug=True)
+            self.val_dataset.enable_data_transforms(set=True, aug=False)
         self.dataloader_kwargs: Dict[str, Any] = dict(
             num_workers = self.config.num_workers or get_worker_count(),
             pin_memory = self.config.pin_memory,

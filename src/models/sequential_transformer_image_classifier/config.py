@@ -16,6 +16,7 @@ class Config:
     attn_head_count: int = 12 # number of heads for multiheaded attention
     bias: bool = False # whether to use biases in layers where it is appropriate
     dropout: float = 0.1 # whether/how much to use dropout where appropriate
+    train_prior_prob: float = 0.05 # percent of the time we should train the model's prior patch probability instead of next patch predictor
     gumbel_tau: float = 1.0 # temperature of the Gumbel softmax distribution
     eps: float = 1e-5 # constant to avoid dividing by zero
     max_sequence_length: Optional[int] = None # maximum number of patches the model can look at
@@ -30,6 +31,7 @@ class Config:
         assert isinstance(self.attn_head_count, int) and (1 <= self.attn_head_count <= self.embedding_dim) and (self.embedding_dim % self.attn_head_count == 0)
         assert isinstance(self.bias, bool)
         assert isinstance(self.dropout, float) and (0 <= self.dropout < 1)
+        assert isinstance(self.train_prior_prob, float) and (0 <= self.train_prior_prob < 1)
         assert isinstance(self.gumbel_tau, float) and (0 < self.gumbel_tau < float('inf'))
         assert isinstance(self.eps, float) and (0 < self.eps < float('inf'))
         self.patch_dim = self.input_channel_count*self.base_patch_dim**2

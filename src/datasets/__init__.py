@@ -12,12 +12,15 @@ class AVAILABLE_DATASETS(Enum):
     ASCADv1_Var = 'ascadv1-var'
     ASCADv2 = 'ascadv2'
     IMAGENET = 'imagenet'
+    IMAGENETTE = 'imagenette'
     OPENWEBTEXT = 'openwebtext'
 
 def get_root(dataset_name: AVAILABLE_DATASETS) -> str:
     assert dataset_name in AVAILABLE_DATASETS
     if dataset_name == AVAILABLE_DATASETS.IMAGENET:
         return IMAGENET_ROOT
+    elif dataset_name == AVAILABLE_DATASETS.IMAGENETTE:
+        return IMAGENETTE_ROOT
     elif dataset_name == AVAILABLE_DATASETS.OPENWEBTEXT:
         return OPENWEBTEXT_ROOT
     elif dataset_name == AVAILABLE_DATASETS.ASCADv1_Fixed:
@@ -38,6 +41,10 @@ def load(dataset_name: Union[str, AVAILABLE_DATASETS], **kwargs) -> Tuple[Datase
         raise NotImplementedError
     elif dataset_name == AVAILABLE_DATASETS.IMAGENET:
         raise NotImplementedError
+    elif dataset_name == AVAILABLE_DATASETS.IMAGENETTE:
+        from .imagenette import Imagenette
+        train_dataset = Imagenette(root, train=True, **kwargs)
+        test_dataset = Imagenette(root, train=False, **kwargs)
     elif dataset_name == AVAILABLE_DATASETS.OPENWEBTEXT:
         raise NotImplementedError
     elif dataset_name == AVAILABLE_DATASETS.ASCADv1_Fixed:

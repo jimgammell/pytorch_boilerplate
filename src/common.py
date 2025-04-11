@@ -27,6 +27,7 @@ for hostname_component in config.keys():
     if hostname_component in HOSTNAME:
         OPENWEBTEXT_ROOT = config[hostname_component]['openwebtext']
         IMAGENET_ROOT = config[hostname_component]['imagenet']
+        IMAGENETTE_ROOT = config[hostname_component]['imagenette']
         ASCADv1_ROOT = config[hostname_component]['ascadv1']
         ASCADv2_ROOT = config[hostname_component]['ascadv2']
 

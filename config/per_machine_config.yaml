@@ -6,5 +6,6 @@ gautschi:
 ee350-csme-precision:
   openwebtext: /mnt/hdd/datasets/openwebtext
   imagenet: /mnt/hdd/datasets/imagenet
+  imagenette: /mnt/hdd/datasets/imagenette
   ascadv1: /mnt/hdd/jgammell/leakage_localization/downloads/ascadv1
   ascadv2: /mnt/hdd/jgammell/leakage_localization/downloads/ascadv2

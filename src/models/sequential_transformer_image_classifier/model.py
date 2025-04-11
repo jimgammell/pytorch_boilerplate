@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Tuple, List
 
 import torch
 from torch import nn
@@ -49,10 +49,10 @@ class Transformer(BaseModule):
     
     def next_iter(self, embedded_patches: torch.Tensor, seq_indices: torch.Tensor, seq_lengths: torch.Tensor, pos_logits: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
         batch_size, *_ = embedded_patches.shape
-        x, mask = self.patch_selector(embedded_patches, seq_indices, seq_lengths, pos_logits)
+        x, mask, pos_dist = self.patch_selector(embedded_patches, seq_indices, seq_lengths, pos_logits)
         x = self.transformer_layers(x, mask)
         class_logits, next_pos_logits = self.head(x, mask)
-        seq_indices[torch.arange(batch_size, device=embedded_patches.device), seq_lengths, :] = torch.multinomial(nn.functional.softmax(next_pos_logits.detach(), dim=-1), 1)
+        seq_indices[torch.arange(batch_size, device=embedded_patches.device), seq_lengths] = torch.multinomial(pos_dist, 1).squeeze(-1)
         seq_lengths = seq_lengths + 1
         return class_logits, next_pos_logits, seq_indices, seq_lengths
     
@@ -62,7 +62,7 @@ class Transformer(BaseModule):
         if max_iters is None:
             max_iters = self.config.max_sequence_length
         embedded_patches = self.get_embedded_patches(x)
-        seq_indices = torch.arange(max_iters, device=x.device).unsqueeze(0).expand(batch_size, -1)
+        seq_indices = torch.zeros(batch_size, max_iters, device=x.device, dtype=torch.long)
         seq_lengths = torch.zeros(batch_size, dtype=torch.long, device=x.device)
         pos_logits = None
         next_pos_logits = torch.full((batch_size, max_iters, self.config.patch_count), torch.nan, device=x.device)
@@ -73,14 +73,40 @@ class Transformer(BaseModule):
         assert class_logits.isfinite().all()
         return class_logits, next_pos_logits
     
-    def training_step(self, x: torch.Tensor) -> torch.Tensor:
+    @torch.no_grad()
+    def run_inference_with_random_sequence(self, x: torch.Tensor, max_iters: Optional[int] = None) -> torch.Tensor:
+        batch_size, *_ = x.shape
+        if max_iters is None:
+            max_iters = self.config.max_sequence_length
         embedded_patches = self.get_embedded_patches(x)
-        batch_size, patch_count, patch_dim = embedded_patches.shape
-        seq_indices = torch.rand(batch_size, patch_count, device=x.device).argsort(dim=-1)
-        seq_lengths = ((patch_count-2)*(torch.rand(batch_size, device=x.device)**2)).to(torch.long)
-        pos_logits = torch.zeros(batch_size, patch_count, device=x.device)
-        for idx in range(batch_size):
-            pos_logits[idx, seq_indices[idx, :seq_lengths[idx]]] = -torch.inf
+        seq_indices = torch.rand(batch_size, max_iters, device=x.device).argsort(dim=-1)
+        class_logits = torch.full((batch_size, max_iters, self.config.output_dim), torch.nan, device=x.device)
+        for idx in range(max_iters):
+            seq_lengths = torch.full((batch_size,), idx, dtype=torch.long, device=x.device)
+            pos_logits = torch.full((batch_size, self.config.patch_count), -torch.inf, device=x.device)
+            pos_logits[:, idx] = 0
+            class_logits[:, idx, :], *_ = self.next_iter(embedded_patches, seq_indices, seq_lengths, pos_logits)
+        assert class_logits.isfinite().all()
+        return class_logits
+    
+    def single_training_step(self, x: torch.Tensor) -> torch.Tensor:
+        embedded_patches = self.get_embedded_patches(x)
+        with torch.no_grad():
+            batch_size, patch_count, patch_dim = embedded_patches.shape
+            seq_indices = torch.rand(batch_size, self.config.max_sequence_length, device=x.device).argsort(dim=-1)
+            seq_lengths = ((patch_count-2)*(torch.rand(batch_size, device=x.device)**2)).to(torch.long)
+            pos_logits = torch.zeros(batch_size, patch_count, device=x.device)
+            for idx in range(batch_size):
+                pos_logits[idx, seq_indices[idx, :seq_lengths[idx]]] = -torch.inf
         _, next_pos_logits, seq_indices, seq_lengths = self.next_iter(embedded_patches, seq_indices, seq_lengths, pos_logits)
+        seq_lengths = seq_lengths * (torch.rand(batch_size, device=x.device) < self.config.train_prior_prob).to(torch.long)
         class_logits, _, _, _ = self.next_iter(embedded_patches, seq_indices, seq_lengths, next_pos_logits)
         return class_logits
+    
+    def get_params_based_on_should_weight_decay(self) -> Tuple[List[nn.Parameter], List[nn.Parameter]]:
+        yes_weight_decay = []
+        for module in self.modules():
+            if isinstance(module, nn.Linear):
+                yes_weight_decay.append(module.weight)
+        no_weight_decay = [param for param in self.parameters() if param not in yes_weight_decay]
+        return yes_weight_decay, no_weight_decay

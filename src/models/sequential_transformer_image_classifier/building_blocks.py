@@ -68,11 +68,14 @@ class PatchSelector(BaseModule):
         # assert (0 <= seq_lengths < self.config.max_sequence_length).all() # hopefully true, but commenting out to avoid CPU-GPU sync
         if pos_logits is None:
             pos_logits = self.prior_pos_logits.expand(batch_size, -1)
+        else: # If the sequence length is zero, we ignore input logits and use the prior. Somewhat-efficient way to make sure this is trained.
+            zero_mask = (seq_lengths == 0).unsqueeze(1).float()
+            pos_logits = zero_mask*self.prior_pos_logits.expand(batch_size, -1) + (1-zero_mask)*pos_logits
         pos_dist = nn.functional.gumbel_softmax(pos_logits, tau=self.config.gumbel_tau, hard=not self.training, dim=-1, eps=self.config.eps).unsqueeze(-1)
         output_sequence = torch.gather(x, dim=1, index=seq_indices.unsqueeze(-1).expand(-1, -1, patch_dim))
         output_sequence[torch.arange(batch_size, device=seq_lengths.device), seq_lengths, :] = (x*pos_dist).sum(dim=1)
         attn_mask = torch.arange(self.config.max_sequence_length).unsqueeze(0).expand(batch_size, -1) <= seq_lengths.unsqueeze(1).expand(-1, self.config.max_sequence_length)
-        return output_sequence, attn_mask
+        return output_sequence, attn_mask, pos_dist
 
 class NormLayer(BaseModule):
     def __init__(self, config: Config):

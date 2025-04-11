@@ -9,7 +9,6 @@ from torchvision import transforms
 import lightning as L
 
 from common import *
-from utils.constant import Constant
 
 ROOT = Constant(os.path.join(RESOURCE_DIR, 'mnist'))
 os.makedirs(ROOT, exist_ok=True)
@@ -49,7 +48,7 @@ class DataModule(L.LightningDataModule):
             if self.val_prop is not None:
                 val_len = int(self.val_prop*len(dataset))
                 train_len = len(dataset) - val_len
-                train_indices = NUMPY_RNG.choice(len(dataset), train_len, replace=False)
+                train_indices = np.random.choice(len(dataset), train_len, replace=False)
                 val_indices = np.array([x for x in np.arange(len(dataset)) if not(x in train_indices)])
                 train_dataset = Subset(dataset, train_indices)
                 val_dataset = Subset(copy(dataset), val_indices)
