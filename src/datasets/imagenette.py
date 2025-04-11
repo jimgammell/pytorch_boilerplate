@@ -24,7 +24,7 @@ class Imagenette(Imagenette_TV):
                 ])
             else:
                 transforms.extend([
-                    transforms_tv.Resize(256),
+                    transforms_tv.Resize(int(256/224)*self.dim),
                     transforms_tv.CenterCrop(self.dim)
                 ])
             transforms.extend([

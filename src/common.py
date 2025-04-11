@@ -87,7 +87,6 @@ def init_logger(print: bool = True, logfile: Optional[str] = None, level: int = 
     logger.debug(f'Project directory: {PROJ_DIR}')
     logger.debug(f'Output directory: {OUTPUT_DIR}')
     logger.debug(f'Config directory: {CONFIG_DIR}')
-    logger.debug(f'OpenWebText root: {OPENWEBTEXT_ROOT}')
     assert torch.cuda.is_available()
     if arch >= 70:
         logger.debug('Using high matmul precision')

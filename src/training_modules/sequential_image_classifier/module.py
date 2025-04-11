@@ -26,7 +26,6 @@ class SequentialImageClassifierModule(lightning.LightningModule):
     ):
         super().__init__()
         self.save_hyperparameters()
-        self.hparams = _ModuleHparams(**self.hparams)
 
         self.model = models.load(self.hparams.classifier_name, self.hparams.classifier_kwargs)
         if self.hparams.config.compile:
@@ -59,14 +58,14 @@ class SequentialImageClassifierModule(lightning.LightningModule):
         x, y = batch
         logits = self.model.single_training_step(x)
         loss = nn.functional.cross_entropy(logits, y)
-        self.log('train_loss', loss, prog_bar=True, on_step=True)
-        self.log('train_acc', get_accuracy(logits, y), prog_bar=True, on_epoch=True)
+        self.log('train_loss', loss, prog_bar=False, on_step=True)
+        self.log('train_acc', get_accuracy(logits, y), prog_bar=True, on_step=False, on_epoch=True)
         return loss
     
     def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int):
         x, y = batch
-        logits_from_patch_predictor = self.model.run_inference(x)
-        logits_from_random_sequence = self.model.run_inference_with_random_sequence(x)
+        logits_from_patch_predictor, _ = self.model.run_inference(x, max_iters=self.hparams.classifier_kwargs['max_sequence_length'])
+        logits_from_random_sequence = self.model.run_inference_with_random_sequence(x, max_iters=self.hparams.classifier_kwargs['max_sequence_length'])
         batch_size, seq_length, class_count = logits_from_patch_predictor.shape
         assert logits_from_patch_predictor.shape == logits_from_random_sequence.shape
         yy = y.unsqueeze(1).expand(batch_size, seq_length)
@@ -82,8 +81,12 @@ class SequentialImageClassifierModule(lightning.LightningModule):
         acc_random_sequence = get_accuracy(
             logits_from_random_sequence.reshape(batch_size*seq_length, class_count), yy.reshape(batch_size*seq_length), avg_result=False
         ).reshape(batch_size, seq_length).mean(dim=0)
-        self.log('val_loss', loss_patch_predictor.mean(), prog_bar=True, on_epoch=True)
+        self.log('val_loss', loss_patch_predictor.mean(), prog_bar=False, on_epoch=True)
         self.log('val_loss_baseline', loss_random_sequence.mean(), prog_bar=False, on_epoch=True)
-        self.log('val_acc', acc_patch_predictor.mean(), prog_bar=True, on_epoch=True)
+        self.log('val_acc', acc_patch_predictor.mean(), prog_bar=False, on_epoch=True)
         self.log('val_acc_baseline', acc_random_sequence.mean(), prog_bar=False, on_epoch=True)
+        self.log('final_val_loss', loss_patch_predictor[-1], prog_bar=False, on_epoch=True)
+        self.log('final_val_loss_baseline', loss_random_sequence[-1], prog_bar=False, on_epoch=True)
+        self.log('final_val_acc', acc_patch_predictor[-1], prog_bar=True, on_epoch=True)
+        self.log('final_val_acc_baseline', acc_random_sequence[-1], prog_bar=True, on_epoch=True)
         return loss_patch_predictor.mean()

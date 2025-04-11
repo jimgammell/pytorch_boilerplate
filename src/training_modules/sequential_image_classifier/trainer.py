@@ -92,8 +92,11 @@ class SequentialImageClassifierTrainer:
                 trainer = LightningTrainer(
                     max_steps=training_config.training_steps,
                     #log_every_n_steps=100,
+                    #accelerator='cpu',
                     precision=training_config.dtype,
                     logger=TensorBoardLogger(save_dir, name='', version=''),
+                    check_val_every_n_epoch=10,
+                    enable_checkpointing=False,
                     callbacks=[]#[early_stopping_checkpoint, progress_bar]
                 )
                 trainer.fit(training_module, datamodule=self.datamodule, ckpt_path=checkpoint_path)

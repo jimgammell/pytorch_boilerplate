@@ -8,6 +8,34 @@ from torch import nn
 from ..base_module import BaseModule
 from .config import Config
 
+class ConvPatchExtractorAndEmbedder(BaseModule):
+    def __init__(self, config: Config):
+        super().__init__()
+        self.config = config
+        self.conv_stem = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, self.config.embedding_dim, kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm2d(self.config.embedding_dim),
+            nn.ReLU(inplace=True)
+        )
+        self.dropout = nn.Dropout(self.config.dropout)
+    
+    def forward(self, x):
+        batch_size, *_ = x.shape
+        patches = []
+        patchified_x = self.conv_stem(x).reshape(batch_size, self.config.embedding_dim, self.config.patch_count)
+        idx = 0
+        while idx < self.config.patch_count:
+            patches.append(patchified_x.flatten(start_dim=2))
+            patchified_x = nn.functional.avgpool2d(patchified_x, kernel_size=2, stride=2)
+        patches = torch.cat(patches, dim=-1).permute(0, 2, 1)
+        return patches
+
 class PatchExtractor(BaseModule):
     def __init__(self, config: Config):
         super().__init__()
@@ -24,7 +52,7 @@ class PatchExtractor(BaseModule):
         )
         for idx, (start_patch_idx, end_patch_idx) in enumerate(zip(self.per_res_patch_indices[:-1], self.per_res_patch_indices[1:])):
             patches[:, :, start_patch_idx:end_patch_idx] = nn.functional.unfold(x, kernel_size=self.config.base_patch_dim, stride=self.config.base_patch_dim)
-            if idx < self.config.resolutions-1:
+            if idx < self.config.resolutions:
                 x = nn.functional.avg_pool2d(x, kernel_size=2, stride=2)
         patches = patches.permute(0, 2, 1)
         return patches
@@ -60,34 +88,34 @@ class PatchSelector(BaseModule):
         seq_lengths: torch.Tensor, # the lengths of each of the sequences in the batch
         pos_logits: Optional[torch.Tensor] = None # the distribution over the next patch
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        batch_size, patch_count, patch_dim = x.shape
+        batch_size, patch_count, embedding_dim = x.shape
         assert patch_count == self.config.patch_count
-        assert patch_dim == self.config.patch_dim
+        assert embedding_dim == self.config.embedding_dim
         assert batch_size == seq_indices.size(0) == seq_lengths.size(0)
         assert seq_indices.size(-1) == self.config.max_sequence_length
         # assert (0 <= seq_lengths < self.config.max_sequence_length).all() # hopefully true, but commenting out to avoid CPU-GPU sync
         if pos_logits is None:
             pos_logits = self.prior_pos_logits.expand(batch_size, -1)
-        else: # If the sequence length is zero, we ignore input logits and use the prior. Somewhat-efficient way to make sure this is trained.
+        else: # If the sequence length is zero, we ignore input logits and use the prior. Somewhat-efficient way to let us do this for only some elements of a batch.
             zero_mask = (seq_lengths == 0).unsqueeze(1).float()
             pos_logits = zero_mask*self.prior_pos_logits.expand(batch_size, -1) + (1-zero_mask)*pos_logits
-        pos_dist = nn.functional.gumbel_softmax(pos_logits, tau=self.config.gumbel_tau, hard=not self.training, dim=-1, eps=self.config.eps).unsqueeze(-1)
-        output_sequence = torch.gather(x, dim=1, index=seq_indices.unsqueeze(-1).expand(-1, -1, patch_dim))
+        pos_dist = nn.functional.gumbel_softmax(pos_logits, tau=self.config.gumbel_tau, hard=not self.training, dim=-1).unsqueeze(-1)
+        output_sequence = torch.gather(x, dim=1, index=seq_indices.unsqueeze(-1).expand(-1, -1, embedding_dim))
         output_sequence[torch.arange(batch_size, device=seq_lengths.device), seq_lengths, :] = (x*pos_dist).sum(dim=1)
-        attn_mask = torch.arange(self.config.max_sequence_length).unsqueeze(0).expand(batch_size, -1) <= seq_lengths.unsqueeze(1).expand(-1, self.config.max_sequence_length)
+        attn_mask = torch.arange(self.config.max_sequence_length, device=x.device).unsqueeze(0).expand(batch_size, -1) <= seq_lengths.unsqueeze(1).expand(-1, self.config.max_sequence_length)
         return output_sequence, attn_mask, pos_dist
 
 class NormLayer(BaseModule):
     def __init__(self, config: Config):
         super().__init__()
         self.config = config
-        self.weight = nn.Parameter(torch.ones(self.config.embedding_dim))
+        self.norm = nn.LayerNorm(self.config.embedding_dim, eps=self.config.eps)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         batch_size, patch_count, embedding_dim = x.shape
-        assert patch_count == self.config.patch_count
+        assert patch_count == self.config.max_sequence_length
         assert embedding_dim == self.config.embedding_dim
-        return nn.functional.rms_norm(x, self.weight.shape, weight=self.weight, eps=self.config.eps)
+        return self.norm(x)
 
 class AttentionLayer(BaseModule):
     def __init__(self, config: Config):
@@ -104,10 +132,10 @@ class AttentionLayer(BaseModule):
     def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         batch_size, patch_count, embedding_dim = x.shape
         assert batch_size == mask.size(0)
-        assert patch_count == mask.size(1) == self.config.patch_count
+        assert patch_count == mask.size(1) == self.config.max_sequence_length
         assert embedding_dim == self.config.embedding_dim
-        qkv = self.to_qkv.split(self.config.embedding_dim, dim=2)
-        q, k, v = map(lambda x: x.view(batch_size, patch_count, self.config.attn_head_count, self.head_dim).transpose(1, 2), qkv)
+        qkv = self.to_qkv(x).split(self.config.embedding_dim, dim=2)
+        q, k, v = map(lambda u: u.view(batch_size, patch_count, self.config.attn_head_count, self.config.attn_head_dim).transpose(1, 2), qkv)
         if mask is not None:
             mask = mask.reshape(batch_size, 1, 1, patch_count).expand(-1, self.config.attn_head_count, patch_count, -1)
         pre_out = nn.functional.scaled_dot_product_attention(
@@ -146,7 +174,7 @@ class AttentionPoolingLayer(BaseModule):
         self.to_kv = nn.Linear(self.config.embedding_dim, 2*self.config.embedding_dim, bias=False)
         self.to_classification_logits = nn.Linear(self.config.embedding_dim, self.config.output_dim, bias=True)
         self.to_next_patch_logits = nn.Linear(self.config.embedding_dim, self.config.patch_count, bias=False)
-        self.next_patch_logits_bias = next_patch_logits_bias or nn.Parameter(torch.zeros(1, self.config.patch_count))
+        self.next_patch_logits_bias = next_patch_logits_bias if next_patch_logits_bias is not None else  nn.Parameter(torch.zeros(1, self.config.patch_count))
         nn.init.xavier_uniform_(self.to_kv.weight)
         nn.init.xavier_uniform_(self.to_classification_logits.weight)
         nn.init.xavier_uniform_(self.to_next_patch_logits.weight)
@@ -158,9 +186,9 @@ class AttentionPoolingLayer(BaseModule):
         kv = self.to_kv(x).split(self.config.embedding_dim, dim=2)
         q, k, v = map(lambda x: x.view(batch_size, -1, self.config.attn_head_count, self.config.attn_head_dim).transpose(1, 2), (q, *kv))
         if mask is not None:
-            mask = mask.reshape(batch_size, 1, 1, patch_count).expand(-1, self.config.attn_head_count, self.config.output_dim, -1)
+            mask = mask.reshape(batch_size, 1, 1, patch_count).expand(-1, self.config.attn_head_count, 2, -1)
         pre_out = nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0, is_causal=False)
         pre_out = pre_out.transpose(1, 2).contiguous().view(batch_size, 2, embedding_dim)
-        classification_logits = self.to_classification_logits(pre_out)
-        next_patch_logits = self.to_next_patch_logits(pre_out) + self.next_patch_logits_bias
+        classification_logits = self.to_classification_logits(pre_out[:, 0, :])
+        next_patch_logits = self.to_next_patch_logits(pre_out[:, 1, :]) + self.next_patch_logits_bias
         return classification_logits, next_patch_logits

@@ -5,6 +5,7 @@ from .base_module import BaseModule
 
 class AVAILABLE_MODELS(Enum):
     TRANSFORMER_FOR_SCA = 'transformer-for-sca'
+    SEQUENTIAL_TRANSFORMER = 'sequential-transformer'
 
 def load(model_name: Union[str, AVAILABLE_MODELS], config_kwargs: Dict[str, Any]) -> BaseModule:
     if isinstance(model_name, str):
@@ -12,6 +13,10 @@ def load(model_name: Union[str, AVAILABLE_MODELS], config_kwargs: Dict[str, Any]
     if model_name == AVAILABLE_MODELS.TRANSFORMER_FOR_SCA:
         from .transformer_for_sca import Transformer, TransformerConfig
         config = TransformerConfig(**config_kwargs)
+        model = Transformer(config)
+    elif model_name == AVAILABLE_MODELS.SEQUENTIAL_TRANSFORMER:
+        from .sequential_transformer_image_classifier import Transformer, Config
+        config = Config(**config_kwargs)
         model = Transformer(config)
     else:
         assert False

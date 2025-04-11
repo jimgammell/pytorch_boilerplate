@@ -10,6 +10,7 @@ class Config:
     input_dim: int = 224 # transformer inputs will have shape (batch_size, self.input_channel_count, self.input_dim, self.input_dim)
     output_dim: int = 10 # number of dimensions in the output head -- e.g. 10 if we are doing 10-class classification
     base_patch_dim: int = 14 # width == height of the smallest patches.
+    use_conv_stem: bool = False # whether to use conv stem at the input. Will downsample the image by 8x so we need the patch width to be divisible by 8.
     resolutions: int = 4 # Number of times to apply 2x average pooling to the image and re-patchify.
     embedding_dim: int = 768 # hidden activation dimension
     transformer_layer_count: int = 3 # number of transformer layers
@@ -36,7 +37,7 @@ class Config:
         assert isinstance(self.eps, float) and (0 < self.eps < float('inf'))
         self.patch_dim = self.input_channel_count*self.base_patch_dim**2
         self.per_res_patch_counts = np.array([(self.input_dim//(self.base_patch_dim*2**downsample_count))**2 for downsample_count in range(self.resolutions)], dtype=int)
-        self.patch_count = self.per_res_patch_counts.sum()
+        self.patch_count = int(self.per_res_patch_counts.sum())
         if self.max_sequence_length is None:
             self.max_sequence_length = self.patch_count
         self.attn_head_dim = self.embedding_dim // self.attn_head_count
