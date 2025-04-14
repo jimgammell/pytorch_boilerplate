@@ -37,15 +37,21 @@ class Transformer(BaseModule):
     def __init__(self, config: Config):
         super().__init__()
         self.config = config
-        self.patch_extractor = PatchExtractor(self.config)
-        self.patch_embedder = PatchEmbedder(self.config)
+        if self.config.use_conv_stem:
+            self.conv_stem = ConvPatchExtractorAndEmbedder(self.config)
+        else:
+            self.patch_extractor = PatchExtractor(self.config)
+            self.patch_embedder = PatchEmbedder(self.config)
         self.patch_selector = PatchSelector(self.config)
         self.transformer_layers = nn.ModuleList(TransformerLayer(self.config) for _ in range(self.config.transformer_layer_count))
         self.head = Head(self.config, next_patch_logits_bias=self.patch_selector.prior_pos_logits)
     
     def get_embedded_patches(self, x: torch.Tensor) -> torch.Tensor:
-        patches = self.patch_extractor(x)
-        embedded_patches = self.patch_embedder(patches)
+        if self.config.use_conv_stem:
+            embedded_patches = self.conv_stem(x)
+        else:
+            patches = self.patch_extractor(x)
+            embedded_patches = self.patch_embedder(patches)
         return embedded_patches
     
     def next_iter(self, embedded_patches: torch.Tensor, seq_indices: torch.Tensor, seq_lengths: torch.Tensor, pos_logits: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -104,6 +110,18 @@ class Transformer(BaseModule):
         _, next_pos_logits, seq_indices, seq_lengths = self.next_iter(embedded_patches, seq_indices, seq_lengths, pos_logits)
         seq_lengths = seq_lengths * (torch.rand(batch_size, device=x.device) < self.config.train_prior_prob).to(torch.long)
         class_logits, _, _, _ = self.next_iter(embedded_patches, seq_indices, seq_lengths, next_pos_logits)
+        return class_logits
+    
+    def single_pretrain_step(self, x: torch.Tensor) -> torch.Tensor: # train on entire sequence instead of partial sequences
+        embedded_patches = self.get_embedded_patches(x)
+        with torch.no_grad():
+            batch_size, patch_count, patch_dim = embedded_patches.shape
+            seq_indices = torch.rand(batch_size, patch_count, device=x.device).argsort(dim=-1)
+            if self.training:
+                seq_lengths = ((patch_count-1)*torch.rand(batch_size, device=x.device).sqrt()).to(torch.long)
+            else:
+                seq_lengths = torch.full((batch_size,), patch_count-1, dtype=torch.long, device=x.device)
+        class_logits, *_ = self.next_iter(embedded_patches, seq_indices, seq_lengths, None)
         return class_logits
     
     def forward(self, x):

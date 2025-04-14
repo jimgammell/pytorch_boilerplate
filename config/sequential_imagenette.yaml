@@ -1,41 +1,43 @@
 default_model_config:
   input_channel_count: 3
-  input_dim: 224
+  input_dim: 256
   output_dim: 10
-  base_patch_dim: 14
-  use_conv_stem: false
-  resolutions: 4
+  base_patch_dim: 16
+  use_conv_stem: true
   embedding_dim: 768
+  mlp_dim: 3072
   transformer_layer_count: 12
-  attn_head_count: 6
-  bias: false
-  dropout: 0.0
+  attn_head_count: 12
+  bias: true
+  dropout: 0.1
   train_prior_prob: 0.05
   gumbel_tau: 1.0
   eps: 1.e-5
-  max_sequence_length: 100 # all possible patches will be used
+  max_sequence_length: null # all possible patches will be used
 default_training_config:
-  training_steps: 100000
-  base_lr: 3.e-4
+  training_steps: 6700
+  base_lr: 1.e-4
   lr_scheduler_name: cosine_decay
   lr_scheduler_kwargs:
-    warmup_steps: 5000
+    warmup_steps: 500
     const_steps: 0
-    final_lr_prop: 0.1
+    final_lr_prop: 0.0
   beta_1: 0.9
   beta_2: 0.95
   eps: 1.e-8
-  weight_decay: 0.0
+  weight_decay: 0.05
   grad_clip: 1.0
   dtype: bf16-mixed
+  use_mixup_and_cutmix: true
   compile: true
+  pretrain: true
 datamodule_config:
   val_prop: 0.1
-  train_batch_size: 128
+  train_batch_size: 256
   eval_batch_size: 2048
   num_workers: 8
   pin_memory: true
   persistent_workers: false
   prefetch_factor: 1
 dataset_config:
-  dim: 224
+  dim: 256

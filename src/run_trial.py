@@ -31,6 +31,8 @@ def train_sequential_image_classifier(args, default_training_config_kwargs, defa
     save_dir = os.path.join(OUTPUT_DIR, trial_name)
     os.makedirs(save_dir, exist_ok=True)
     init_logger(print=not(args.quiet), logfile=os.path.join(save_dir, 'log'), level=args.log_level)
+    if args.tune_lr:
+        trainer.lr_sweep(os.path.join(save_dir, 'tune_lr'))
     trainer.run(os.path.join(save_dir, 'trainer_output'))
 
 def compute_parametric_stats(args):
@@ -82,6 +84,9 @@ def main():
     sequential_image_classification_parser.add_argument(
         '--config-file', action='store', default=None, choices=AVAILABLE_CONFIG_NAMES,
         help=f'Which hyperparameter config file to use: `{os.path.join(CONFIG_DIR, "<CONFIG_FILE>.yaml")}`. This file must exist and be properly set up.'
+    )
+    sequential_image_classification_parser.add_argument(
+        '--tune-lr', action='store_true', default=False, help='Whether or not to run a learning rate sweep before training.'
     )
     args = parser.parse_args()
 

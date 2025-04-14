@@ -5,6 +5,7 @@ from matplotlib import pyplot as plt
 from common import *
 
 def plot_training_curves(training_curves: Dict[str, Tuple[NDArray, NDArray]], save_dir: str):
+    print([(key, v1.shape, v2.shape) for key, (v1, v2) in training_curves.items()])
     fig, axes = plt.subplots(1, 2, figsize=(2*PLOT_WIDTH, 1*PLOT_WIDTH))
     axes[0].plot(*training_curves['train_loss'], color='blue', linestyle='--', label='train', **PLOT_KWARGS)
     axes[0].plot(*training_curves['val_loss_epoch'], color='blue', linestyle='-', label='val', **PLOT_KWARGS)

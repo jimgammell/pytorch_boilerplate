@@ -4,6 +4,7 @@ from math import sqrt
 import numpy as np
 import torch
 from torch import nn
+from torchvision.ops import MLP
 
 from ..base_module import BaseModule
 from .config import Config
@@ -12,28 +13,31 @@ class ConvPatchExtractorAndEmbedder(BaseModule):
     def __init__(self, config: Config):
         super().__init__()
         self.config = config
-        self.conv_stem = nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(128, self.config.embedding_dim, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(self.config.embedding_dim),
-            nn.ReLU(inplace=True)
+        self.stem = nn.Sequential(
+            nn.Conv2d(self.config.input_channel_count, 48, kernel_size=3, stride=2, padding=1),
+            nn.Conv2d(48, 96, kernel_size=3, stride=2, padding=1),
+            nn.Conv2d(96, 192, kernel_size=3, stride=2, padding=1),
+            nn.Conv2d(192, 384, kernel_size=3, stride=2, padding=1),
+            nn.Conv2d(384, self.config.embedding_dim, kernel_size=1, stride=1, padding=0)
         )
+        self.patch_count = 16**2 + 8**2 + 4**2 + 2**2 + 1**2
+        self.position_embeddings = nn.Parameter(torch.zeros(1, self.patch_count, self.config.embedding_dim))
         self.dropout = nn.Dropout(self.config.dropout)
     
-    def forward(self, x):
-        batch_size, *_ = x.shape
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         patches = []
-        patchified_x = self.conv_stem(x).reshape(batch_size, self.config.embedding_dim, self.config.patch_count)
-        idx = 0
-        while idx < self.config.patch_count:
-            patches.append(patchified_x.flatten(start_dim=2))
-            patchified_x = nn.functional.avgpool2d(patchified_x, kernel_size=2, stride=2)
-        patches = torch.cat(patches, dim=-1).permute(0, 2, 1)
+        x = self.stem(x)
+        patches.append(x)
+        x = nn.functional.avg_pool2d(x, kernel_size=2, stride=2)
+        patches.append(x)
+        x = nn.functional.avg_pool2d(x, kernel_size=2, stride=2)
+        patches.append(x)
+        x = nn.functional.avg_pool2d(x, kernel_size=2, stride=2)
+        patches.append(x)
+        x = nn.functional.avg_pool2d(x, kernel_size=2, stride=2)
+        patches.append(x)
+        patches = torch.cat([patch.flatten(start_dim=2).permute(0, 2, 1) for patch in patches], dim=1)
+        patches = patches + self.position_embeddings
         return patches
 
 class PatchExtractor(BaseModule):
@@ -101,7 +105,7 @@ class PatchSelector(BaseModule):
             pos_logits = zero_mask*self.prior_pos_logits.expand(batch_size, -1) + (1-zero_mask)*pos_logits
         pos_dist = nn.functional.gumbel_softmax(pos_logits, tau=self.config.gumbel_tau, hard=not self.training, dim=-1).unsqueeze(-1)
         output_sequence = torch.gather(x, dim=1, index=seq_indices.unsqueeze(-1).expand(-1, -1, embedding_dim))
-        output_sequence[torch.arange(batch_size, device=seq_lengths.device), seq_lengths, :] = (x*pos_dist).sum(dim=1)
+        output_sequence[torch.arange(batch_size, device=seq_lengths.device), seq_lengths-1, :] = (x*pos_dist).sum(dim=1)
         attn_mask = torch.arange(self.config.max_sequence_length, device=x.device).unsqueeze(0).expand(batch_size, -1) <= seq_lengths.unsqueeze(1).expand(-1, self.config.max_sequence_length)
         return output_sequence, attn_mask, pos_dist
 
@@ -127,7 +131,7 @@ class AttentionLayer(BaseModule):
         nn.init.xavier_uniform_(self.to_qkv.weight)
         nn.init.xavier_uniform_(self.to_out.weight)
         if self.config.bias:
-            nn.init.constant_(self.to_out.bias)
+            nn.init.constant_(self.to_out.bias, 0)
     
     def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         batch_size, patch_count, embedding_dim = x.shape
@@ -146,7 +150,7 @@ class AttentionLayer(BaseModule):
         out = self.dropout(out)
         return out
 
-class FeedForwardLayer(BaseModule):
+r"""class FeedForwardLayer(BaseModule):
     def __init__(self, config: Config, out_dim: Optional[int] = None):
         super().__init__()
         self.config = config
@@ -164,7 +168,25 @@ class FeedForwardLayer(BaseModule):
         x1, x2 = self.w12(x).split(self.config.embedding_dim, dim=2)
         out = self.w3(nn.functional.silu(x1)*x2)
         out = self.dropout(out)
-        return out
+        return out"""
+
+class FeedForwardLayer(BaseModule):
+    def __init__(self, config: Config, out_dim: Optional[int] = None):
+        super().__init__()
+        self.config = config
+        self.out_dim = out_dim or self.config.embedding_dim
+        self.mlp = MLP(
+            in_channels=self.config.embedding_dim, hidden_channels=[self.config.mlp_dim, self.out_dim],
+            activation_layer=nn.GELU, dropout=self.config.dropout, inplace=None
+        )
+        for mod in self.modules():
+            if isinstance(mod, nn.Linear):
+                nn.init.xavier_uniform_(mod.weight)
+                if mod.bias is not None:
+                    nn.init.normal_(mod.bias, std=1e-6)
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.mlp(x)
 
 class AttentionPoolingLayer(BaseModule):
     def __init__(self, config: Config, next_patch_logits_bias: Optional[torch.Tensor] = None):

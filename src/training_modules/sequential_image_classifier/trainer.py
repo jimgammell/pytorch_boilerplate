@@ -1,5 +1,6 @@
 from typing import Dict, Any
 from copy import copy
+from math import log10
 
 import yaml
 from lightning import Trainer as LightningTrainer
@@ -95,7 +96,7 @@ class SequentialImageClassifierTrainer:
                     #accelerator='cpu',
                     precision=training_config.dtype,
                     logger=TensorBoardLogger(save_dir, name='', version=''),
-                    check_val_every_n_epoch=10,
+                    check_val_every_n_epoch=1,
                     enable_checkpointing=False,
                     callbacks=[]#[early_stopping_checkpoint, progress_bar]
                 )
@@ -111,9 +112,22 @@ class SequentialImageClassifierTrainer:
                     logger=TensorBoardLogger(save_dir, name='', version=''),
                     callbacks=[]#[early_stopping_checkpoint, progress_bar]
                 )
-            test_results = trainer.test(training_module, datamodule=self.datamodule, verbose=False)
-            logger.info(f'Test results: {test_results}')
+            #test_results = trainer.test(training_module, datamodule=self.datamodule, verbose=False)
+            #logger.info(f'Test results: {test_results}')
             extract_training_curves(save_dir)
-        if os.path.exists(os.path.join(save_dir, 'training_curves.npz')):
-            training_curves = load_training_curves(save_dir)
-            plot_training_curves(training_curves, save_dir)
+        #if os.path.exists(os.path.join(save_dir, 'training_curves.npz')):
+        #    training_curves = load_training_curves(save_dir)
+        #    plot_training_curves(training_curves, save_dir)
+    
+    def lr_sweep(self,
+        save_dir: str,
+        start_lr: float = 1e-5, end_lr: float = 1e-3, lr_count: float = 10,
+        classifier_config_kwargs: Dict[str, Any] = {},
+        training_config_kwargs: Dict[str, Any] = {},
+        may_resume: bool = True
+    ):
+        os.makedirs(save_dir, exist_ok=True)
+        for lr in np.logspace(log10(start_lr), log10(end_lr), lr_count):
+            subdir = os.path.join(save_dir, f'lr={lr}')
+            training_config_kwargs['base_lr'] = float(lr)
+            self.run(subdir, classifier_config_kwargs=classifier_config_kwargs, training_config_kwargs=training_config_kwargs, may_resume=may_resume)
