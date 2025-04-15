@@ -1,35 +1,43 @@
 default_model_config:
-  patch_size: 10000
-  layer_count: 3
+  patch_size: 2000
+  layer_count: 6
   attn_head_count: 12
   embedding_dim: 768
   dropout: 0.0
+  input_dropout: 0.0
+  head_dropout: 0.0
+  input_noise_std: 0.0
+  input_jitter: 0
   bias: false
   norm_eps: 1.e-5
-  rescale_norm_outputs: true
+  rescale_norm_outputs: false
   output_head_count: 16
   output_head_classes: 256
+  shared_head: true
+  head_type: simple-shared
 default_training_config:
-  training_steps: 5000
-  base_lr: 2.e-4
+  training_steps: 100000
+  base_lr: 5.e-4
   lr_scheduler_name: cosine_decay
   lr_scheduler_kwargs:
-    warmup_steps: 2000
-    const_steps: 3000
+    warmup_steps: 1000
+    const_steps: 0
+    final_lr_prop: 0.01
   beta_1: 0.9
   beta_2: 0.99
   eps: 1.e-8
-  weight_decay: 1.e-4
+  weight_decay: 1.e-2
   grad_clip: 1.0
-  dtype: bf16-true
+  dtype: bf16-mixed
   compile: true
 datamodule_config:
   val_prop: 0.1
-  train_batch_size: 128
+  train_batch_size: 512
   eval_batch_size: 512
-  num_workers: null # detect automatically
+  num_workers: 8
   pin_memory: true
-  persistent_workers: true
-  prefetch_factor: 4
+  persistent_workers: false
+  prefetch_factor: 1
 dataset_config:
-  target: unprotected
+  target: subbytes
+  store_in_ram: false

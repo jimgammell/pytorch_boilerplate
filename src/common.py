@@ -22,14 +22,15 @@ sys.path.insert(0, SRC_DIR)
 AVAILABLE_CONFIG_NAMES = [x.split('.')[0] for x in os.listdir(CONFIG_DIR) if x != 'per_machine_config.yaml']
 assert os.path.exists(os.path.join(CONFIG_DIR, 'per_machine_config.yaml'))
 with open(os.path.join(CONFIG_DIR, 'per_machine_config.yaml'), 'r') as f:
-    config = yaml.load(f, Loader=yaml.FullLoader)
-for hostname_component in config.keys():
+    _config = yaml.load(f, Loader=yaml.FullLoader)
+for hostname_component in _config.keys():
     if hostname_component in HOSTNAME:
-        OPENWEBTEXT_ROOT = config[hostname_component]['openwebtext']
-        IMAGENET_ROOT = config[hostname_component]['imagenet']
-        IMAGENETTE_ROOT = config[hostname_component]['imagenette']
-        ASCADv1_ROOT = config[hostname_component]['ascadv1']
-        ASCADv2_ROOT = config[hostname_component]['ascadv2']
+        config = _config[hostname_component]
+        OPENWEBTEXT_ROOT = config['openwebtext'] if 'openwebtext' in config else None
+        IMAGENET_ROOT = config['imagenet'] if 'imagenet' in config else None
+        IMAGENETTE_ROOT = config['imagenette'] if 'imagenette' in config else None
+        ASCADv1_ROOT = config['ascadv1'] if 'ascadv1' in config else None
+        ASCADv2_ROOT = config['ascadv2'] if 'ascadv2' in config else None
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(CONFIG_DIR, exist_ok=True)

@@ -121,7 +121,7 @@ class SequentialImageClassifierTrainer:
     
     def lr_sweep(self,
         save_dir: str,
-        start_lr: float = 1e-5, end_lr: float = 1e-3, lr_count: float = 10,
+        start_lr: float = 1e-6, end_lr: float = 1e-2, lr_count: float = 20,
         classifier_config_kwargs: Dict[str, Any] = {},
         training_config_kwargs: Dict[str, Any] = {},
         may_resume: bool = True

@@ -1,0 +1,37 @@
+default_model_config:
+  input_channel_count: 3
+  input_dim: 256
+  output_dim: 10
+  patch_size: 16
+  embedding_dim: 192
+  mlp_dim: 768
+  transformer_layer_count: 12
+  attn_head_count: 3
+  bias: true
+  dropout: 0.0
+default_training_config:
+  training_steps: 3400
+  base_lr: 5.e-4
+  lr_scheduler_name: cosine_decay
+  lr_scheduler_kwargs:
+    warmup_steps: 170
+    const_steps: 0
+    warmup_lr_prop: 0.002
+    final_lr_prop: 0.02
+  beta_1: 0.9
+  beta_2: 0.999
+  eps: 1.e-8
+  weight_decay: 0.05
+  grad_clip: null
+  use_mixup_and_cutmix: true
+  compile: true
+datamodule_config:
+  val_prop: 0.1
+  train_batch_size: 768
+  eval_batch_size: 2048
+  num_workers: 8
+  pin_memory: true
+  persistent_workers: false
+  prefetch_factor: 1
+dataset_config:
+  dim: 256

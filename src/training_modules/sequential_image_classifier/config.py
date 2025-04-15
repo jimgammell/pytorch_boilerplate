@@ -28,7 +28,8 @@ class Config:
         assert isinstance(self.beta_2, float) and (0 < self.beta_2 < 1)
         assert isinstance(self.weight_decay, float) and (self.weight_decay >= 0) and isfinite(self.weight_decay)
         assert isinstance(self.eps, float) and (self.eps > 0) and isfinite(self.eps)
-        assert isinstance(self.grad_clip, float) and (self.grad_clip > 0) and isfinite(self.grad_clip)
+        if self.grad_clip is not None:
+            assert isinstance(self.grad_clip, float) and (self.grad_clip > 0) and isfinite(self.grad_clip)
         assert (self.lr_scheduler_name is None) or (isinstance(self.lr_scheduler_name, str) and any(x.value == self.lr_scheduler_name for x in AVAILABLE_LR_SCHEDULERS))
         assert isinstance(self.lr_scheduler_kwargs, dict) and all(isinstance(x, str) for x in self.lr_scheduler_kwargs.keys())
         assert isinstance(self.use_mixup_and_cutmix, bool)

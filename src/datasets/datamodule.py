@@ -3,11 +3,28 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
-from torch.utils.data import Dataset, Subset, DataLoader
+from torch.utils.data import Dataset, Subset, DataLoader, Sampler
 import lightning
 
 from common import *
 from .base_dataset import BaseDataset
+
+class RepeatedAugmentationSampler(Sampler):
+    def __init__(self, data_source, num_repeats=3, shuffle=True):
+        self.data_source = data_source
+        self.num_repeats = num_repeats
+        self.shuffle = shuffle
+        self.sample_count = len(self.data_source)*self.num_repeats
+    
+    def __iter__(self):
+        indices = np.arange(len(self.data_source))
+        if self.shuffle:
+            np.random.shuffle(indices)
+        indices = indices.repeat(self.num_repeats)
+        return iter(indices.tolist())
+
+    def __len__(self) -> int:
+        return self.sample_count
 
 @dataclass
 class DataModuleConfig:
@@ -63,9 +80,10 @@ class DataModule(lightning.LightningDataModule):
             persistent_workers = self.config.persistent_workers,
             prefetch_factor = self.config.prefetch_factor
         )
+        self.repeat_augment_sampler = RepeatedAugmentationSampler(self.train_dataset)
     
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.config.train_batch_size, shuffle=True, **self.dataloader_kwargs)
+        return DataLoader(self.train_dataset, batch_size=self.config.train_batch_size, sampler=self.repeat_augment_sampler, **self.dataloader_kwargs)
     
     def val_dataloader(self):
         return DataLoader(self.val_dataset, batch_size=self.config.eval_batch_size, **self.dataloader_kwargs)
