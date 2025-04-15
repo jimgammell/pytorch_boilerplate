@@ -48,15 +48,15 @@ class _Database:
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, ...]:
         database_idx = np.logical_and(idx >= self.cumulative_datafile_lengths[:-1], idx < self.cumulative_datafile_lengths[1:]).argmax()
         point_idx = idx - self.cumulative_datafile_lengths[database_idx]
-        trace = torch.from_numpy(self.traces[database_idx][point_idx])
-        return (trace, *list(map(lambda x: torch.from_numpy(x[idx]), (self.plaintext, self.key, self.masks))))
+        trace = torch.from_numpy(self.traces[database_idx][point_idx]).to(torch.float)
+        return (trace, *list(map(lambda x: torch.from_numpy(x[idx]).to(torch.long), (self.plaintext, self.key, self.masks))))
     
     def __len__(self) -> int:
         return sum(self.datafile_lengths)
 
 class ASCADv2(Dataset):
     DATABASE_SHAPE = (800000, 1000000)
-    TRACE_SHAPE = (1, 100000)
+    TRACE_SHAPE = (1, 1000000)
     PROFILE_INDICES = np.arange(800000)
     ATTACK_INDICES = np.array([], dtype=int)
     DATABASE_FILENAMES = [
@@ -97,10 +97,10 @@ class ASCADv2(Dataset):
         key = np.concatenate([np.array(x['metadata']['key'], dtype=np.uint8) for x in self.data_files])
         masks = np.concatenate([np.array(x['metadata']['masks'], dtype=np.uint8) for x in self.data_files])
         self.data = _Database(traces=traces, plaintext=plaintext, key=key, masks=masks)
-        self.aes_sbox = torch.from_numpy(AES_SBOX)
-        self.g_perm = torch.from_numpy(G_PERM)
-        self.gf256_log = torch.from_numpy(GF256_LOG)
-        self.gf256_alog = torch.from_numpy(GF256_ALOG)
+        self.aes_sbox = torch.from_numpy(AES_SBOX).to(torch.long)
+        self.g_perm = torch.from_numpy(G_PERM).to(torch.long)
+        self.gf256_log = torch.from_numpy(GF256_LOG).to(torch.long)
+        self.gf256_alog = torch.from_numpy(GF256_ALOG).to(torch.long)
         self.mean, self.std = get_trace_sample_stats(traces[0], self.stats_cache_path)
         self.transform = transforms.Compose([
             transforms.Lambda(lambda x: x.to(torch.float).reshape(*self.TRACE_SHAPE)),
@@ -112,18 +112,18 @@ class ASCADv2(Dataset):
     def gf256_prod(self, a: torch.Tensor, b: torch.Tensor):
         rv = torch.zeros_like(a)
         indices = ~torch.logical_or(a == 0, b == 0)
-        rv[indices] = self.gf256_alog[((self.gf256_log[a.to(torch.long)] + self.gf256_log[b.to(torch.long)])%255).to(torch.long)]
+        rv[indices] = self.gf256_alog[((self.gf256_log[a] + self.gf256_log[b])%255)][indices]
         return rv
 
     def compute_target(self, key: torch.Tensor, plaintext: torch.Tensor, masks: torch.Tensor) -> torch.Tensor:
-        perm_params = masks[:4] & 0xFF
-        perm_indices = torch.arange(16, dtype=torch.uint8) ^ 15
+        perm_params = masks[:4] & 0x0F
+        perm_indices = 15 - torch.arange(16, dtype=torch.long)
         for perm_param in perm_params:
-            perm_indices = self.g_perm[(perm_indices ^ perm_param).to(torch.long)]
+            perm_indices = self.g_perm[(perm_indices ^ perm_param)]
         alpha = masks[18].unsqueeze(0)
         beta = masks[17].unsqueeze(0)
-        subbytes = self.aes_sbox[(key ^ plaintext).to(torch.long)]
-        subbytes_perm = self.aes_sbox[(key[perm_indices] ^ plaintext[perm_indices]).to(torch.long)]
+        subbytes = self.aes_sbox[(key ^ plaintext)]
+        subbytes_perm = self.aes_sbox[(key[perm_indices] ^ plaintext[perm_indices])]
         subbytes_alpha = self.gf256_prod(torch.full_like(subbytes, alpha.item()), subbytes)
         subbytes_perm_alpha = self.gf256_prod(torch.full_like(subbytes_perm, alpha.item()), subbytes_perm)
         subbytes_masked = subbytes_alpha ^ beta.item()
