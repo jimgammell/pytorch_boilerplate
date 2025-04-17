@@ -31,6 +31,7 @@ for hostname_component in _config.keys():
         IMAGENETTE_ROOT = config['imagenette'] if 'imagenette' in config else None
         ASCADv1_ROOT = config['ascadv1'] if 'ascadv1' in config else None
         ASCADv2_ROOT = config['ascadv2'] if 'ascadv2' in config else None
+        JESTER_ROOT = config['jester'] if 'jester' in config else None
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(CONFIG_DIR, exist_ok=True)

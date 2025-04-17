@@ -6,6 +6,7 @@ from .base_module import BaseModule
 class AVAILABLE_MODELS(Enum):
     TRANSFORMER_FOR_SCA = 'transformer-for-sca'
     SEQUENTIAL_TRANSFORMER = 'sequential-transformer'
+    CAUSAL_VIVIT = 'causal-vivit'
 
 def load(model_name: Union[str, AVAILABLE_MODELS], config_kwargs: Dict[str, Any]) -> BaseModule:
     if isinstance(model_name, str):
@@ -16,6 +17,10 @@ def load(model_name: Union[str, AVAILABLE_MODELS], config_kwargs: Dict[str, Any]
         model = Transformer(config)
     elif model_name == AVAILABLE_MODELS.SEQUENTIAL_TRANSFORMER:
         from .sequential_transformer_image_classifier import Transformer, Config
+        config = Config(**config_kwargs)
+        model = Transformer(config)
+    elif model_name == AVAILABLE_MODELS.CAUSAL_VIVIT:
+        from .causal_vivit import Transformer, Config
         config = Config(**config_kwargs)
         model = Transformer(config)
     else:

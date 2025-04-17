@@ -89,19 +89,17 @@ class AttentionPoolingLayer(BaseModule):
         self.pool_queries = nn.Parameter(torch.randn(1, self.output_token_count, self.config.embedding_dim))
         self.to_kv = nn.Linear(self.config.embedding_dim, 2*self.config.embedding_dim, bias=False)
         if self.config.shared_head:
-            self.to_out = nn.Linear(self.config.embedding_dim, self.output_dim or self.config.embedding_dim, bias=self.config.bias)
+            self.to_out = nn.Linear(self.config.embedding_dim, self.output_dim or self.config.embedding_dim, bias=True)
             nn.init.xavier_uniform_(self.to_out.weight)
-            if self.config.bias:
-                nn.init.constant_(self.to_out.bias, 0)
+            nn.init.constant_(self.to_out.bias, 0)
         else:
             self.to_out = nn.ModuleList([
-                nn.Linear(self.config.embedding_dim, self.output_dim or self.config.output_head_classes, bias=self.config.bias)
+                nn.Linear(self.config.embedding_dim, self.output_dim or self.config.output_head_classes, bias=True)
                 for _ in range(self.config.output_head_count)
             ])
             for head in self.to_out:
                 nn.init.xavier_uniform_(head.weight)
-                if self.config.bias:
-                    nn.init.constant_(head.bias, 0)
+                nn.init.constant_(head.bias, 0)
         nn.init.xavier_uniform_(self.to_kv.weight)
     
     def forward(self, x, mask: Optional[torch.Tensor] = None):

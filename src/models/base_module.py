@@ -4,6 +4,17 @@ import torch
 from torch import nn
 
 class BaseModule(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.construct()
+        self.init_weights()
+    
+    def construct(self):
+        pass
+
+    def init_weights(self):
+        pass
+
     def extra_repr(self):
         return f'Trainable params: {sum(p.numel() for p in self.parameters() if p.requires_grad)}'
 

@@ -33,7 +33,7 @@ class DataModuleConfig:
     eval_batch_size: int = 2048
     num_workers: Optional[int] = None
     pin_memory: bool = True
-    persistent_workers: bool = True
+    persistent_workers: bool = False
     prefetch_factor: int = 4
 
     def __post_init__(self):

@@ -49,7 +49,9 @@ class Attention(BaseModule):
         assert embedding_dim == self.config.embedding_dim
         qkv = self.to_qkv(x).reshape(batch_size, token_count, 3, self.config.attn_head_count, self.config.attn_head_dim).permute(2, 0, 3, 1, 4)
         q, k, v = qkv.unbind(0)
-        pre_out = nn.functional.scaled_dot_product_attention(q, k, v, dropout_p=self.config.dropout).permute(0, 2, 1, 3).reshape(batch_size, token_count, embedding_dim)
+        pre_out = nn.functional.scaled_dot_product_attention(
+            q, k, v, dropout_p=self.config.dropout if self.training else 0
+        ).permute(0, 2, 1, 3).reshape(batch_size, token_count, embedding_dim)
         out = self.to_out(pre_out)
         out = self.out_dropout(out)
         return out

@@ -8,8 +8,10 @@ import datasets
 import models
 from training_modules.supervised_classification import SupervisedClassificationTrainer
 from training_modules.sequential_image_classifier import SequentialImageClassifierTrainer
+from training_modules.supervised_video import SupervisedVideoTrainer
 
-def train_supervised_classifier(args, default_training_config_kwargs, default_model_config_kwargs, datamodule_config_kwargs, dataset_kwargs={}):
+def train_supervised_classifier(args, default_training_config_kwargs, default_model_config_kwargs, datamodule_config_kwargs, dataset_kwargs=None):
+    dataset_kwargs = dataset_kwargs or {}
     assert args.dataset is not None
     assert args.nn_arch is not None
     trainer = SupervisedClassificationTrainer(
@@ -21,10 +23,26 @@ def train_supervised_classifier(args, default_training_config_kwargs, default_mo
     init_logger(print=not(args.quiet), logfile=os.path.join(save_dir, 'log'), level=args.log_level)
     trainer.run(os.path.join(save_dir, 'trainer_output'))
 
-def train_sequential_image_classifier(args, default_training_config_kwargs, default_model_config_kwargs, datamodule_config_kwargs, dataset_kwargs={}):
+def train_sequential_image_classifier(args, default_training_config_kwargs, default_model_config_kwargs, datamodule_config_kwargs, dataset_kwargs=None):
+    dataset_kwargs = dataset_kwargs or {}
     assert args.dataset is not None
     assert args.nn_arch is not None
     trainer = SequentialImageClassifierTrainer(
+        args.nn_arch, default_model_config_kwargs, default_training_config_kwargs, args.dataset, dataset_kwargs, datamodule_config_kwargs
+    )
+    trial_name = args.trial_name or f'{args.dataset}_{args.nn_arch}'
+    save_dir = os.path.join(OUTPUT_DIR, trial_name)
+    os.makedirs(save_dir, exist_ok=True)
+    init_logger(print=not(args.quiet), logfile=os.path.join(save_dir, 'log'), level=args.log_level)
+    if args.tune_lr:
+        trainer.lr_sweep(os.path.join(save_dir, 'tune_lr'))
+    trainer.run(os.path.join(save_dir, 'trainer_output'))
+
+def train_video_discriminative_model(args, default_training_config_kwargs, default_model_config_kwargs, datamodule_config_kwargs, dataset_kwargs=None):
+    dataset_kwargs = dataset_kwargs or {}
+    assert args.dataset is not None
+    assert args.nn_arch is not None
+    trainer = SupervisedVideoTrainer(
         args.nn_arch, default_model_config_kwargs, default_training_config_kwargs, args.dataset, dataset_kwargs, datamodule_config_kwargs
     )
     trial_name = args.trial_name or f'{args.dataset}_{args.nn_arch}'
@@ -88,6 +106,22 @@ def main():
     sequential_image_classification_parser.add_argument(
         '--tune-lr', action='store_true', default=False, help='Whether or not to run a learning rate sweep before training.'
     )
+    supervised_video_parser = subparsers.add_parser('supervised-video')
+    supervised_video_parser.add_argument(
+        '--dataset', action='store', default=None, type=str, choices=[x.value for x in datasets.AVAILABLE_DATASETS],
+        help='Which dataset to train on.'
+    )
+    supervised_video_parser.add_argument(
+        '--nn-arch', action='store', default=None, type=str, choices=[x.value for x in models.AVAILABLE_MODELS],
+        help='Which model architecture to use.'
+    )
+    supervised_video_parser.add_argument(
+        '--config-file', action='store', default=None, choices=AVAILABLE_CONFIG_NAMES,
+        help=f'Which hyperparameter config file to use: `{os.path.join(CONFIG_DIR, "<CONFIG_FILE>.yaml")}`. This file must exist and be properly set up.'
+    )
+    supervised_video_parser.add_argument(
+        '--tune-lr', action='store_true', default=False, help='Whether or not to run a learning rate sweep before training.'
+    )
     args = parser.parse_args()
 
     if args.action in ['supervised-classify']:
@@ -112,6 +146,16 @@ def main():
         dataset_kwargs = config['dataset_config']
         if args.action == 'sequential-image-classify':
             train_sequential_image_classifier(args, default_training_config_kwargs, default_model_config_kwargs, datamodule_config_kwargs, dataset_kwargs)
+    elif args.action == 'supervised-video':
+        config_name = args.config_file or f'{args.dataset}_{args.nn_arch}'
+        config_path = os.path.join(CONFIG_DIR, f'{config_name}.yaml')
+        with open(config_path, 'r') as f:
+            config = yaml.load(f, Loader=yaml.FullLoader)
+        default_model_config_kwargs = config['default_model_config']
+        default_training_config_kwargs = config['default_training_config']
+        datamodule_config_kwargs = config['datamodule_config']
+        dataset_kwargs = config['dataset_config']
+        train_video_discriminative_model(args, default_training_config_kwargs, default_model_config_kwargs, datamodule_config_kwargs, dataset_kwargs)
     elif args.action  == 'compute-parametric-stats':
         compute_parametric_stats(args)
     else:

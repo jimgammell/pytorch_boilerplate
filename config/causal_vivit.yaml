@@ -1,0 +1,35 @@
+default_model_config:
+  input_channels: 3
+  input_spatial_dim: 128
+  out_dim: 27
+  patch_dim: 16
+  max_input_temporal_dim: 32
+  transformer_head_count: 3
+  transformer_layer_count: 12
+  transformer_hidden_dim: 192
+  transformer_mlp_expansion_ratio: 4
+  dropout: 0.0
+default_training_config:
+  training_steps: 3706
+  base_lr: 1.e-5
+  lr_scheduler_name: cosine_decay
+  lr_scheduler_kwargs:
+    warmup_steps: 170
+    const_steps: 0
+    warmup_lr_prop: 0.002
+    final_lr_prop: 0.02
+  beta_1: 0.9
+  beta_2: 0.999
+  eps: 1.e-8
+  weight_decay: 0.05
+  grad_clip: null
+  compile: true
+datamodule_config:
+  train_batch_size: 128
+  eval_batch_size: 128
+  num_workers: 32
+  pin_memory: true
+  persistent_workers: false
+  prefetch_factor: 1
+dataset_config:
+  dim: 128

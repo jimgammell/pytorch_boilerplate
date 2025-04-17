@@ -14,6 +14,7 @@ class AVAILABLE_DATASETS(Enum):
     IMAGENET = 'imagenet'
     IMAGENETTE = 'imagenette'
     OPENWEBTEXT = 'openwebtext'
+    JESTER = 'jester'
 
 def get_root(dataset_name: AVAILABLE_DATASETS) -> str:
     assert dataset_name in AVAILABLE_DATASETS
@@ -29,6 +30,8 @@ def get_root(dataset_name: AVAILABLE_DATASETS) -> str:
         return ASCADv1_ROOT
     elif dataset_name == AVAILABLE_DATASETS.ASCADv2:
         return ASCADv2_ROOT
+    elif dataset_name == AVAILABLE_DATASETS.JESTER:
+        return JESTER_ROOT
     else:
         return os.path.join(RESOURCE_DIR, dataset_name.value)
 
@@ -59,6 +62,12 @@ def load(dataset_name: Union[str, AVAILABLE_DATASETS], **kwargs) -> Tuple[Datase
         from .ascad.ascadv2 import ASCADv2
         train_dataset = ASCADv2(root, train=True, **kwargs)
         test_dataset = None
+    elif dataset_name == AVAILABLE_DATASETS.JESTER:
+        from .jester import Jester, JesterDataModule
+        train_dataset = Jester(JESTER_ROOT, split='train', **kwargs)
+        val_dataset = Jester(JESTER_ROOT, split='val', **kwargs)
+        test_dataset = Jester(JESTER_ROOT, split='test', **kwargs)
+        return train_dataset, val_dataset, test_dataset, JesterDataModule
     else:
         assert False
     return train_dataset, test_dataset
