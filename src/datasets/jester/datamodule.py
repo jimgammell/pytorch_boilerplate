@@ -26,7 +26,8 @@ class DataModuleConfig:
         assert isinstance(self.num_workers, int) and (self.num_workers >= 0)
         assert isinstance(self.pin_memory, bool)
         assert isinstance(self.persistent_workers, bool)
-        assert isinstance(self.prefetch_factor, int) and (self.prefetch_factor > 0)
+        if self.prefetch_factor is not None:
+            assert isinstance(self.prefetch_factor, int) and (self.prefetch_factor > 0)
         assert isinstance(self.timestep_count, int) and (self.timestep_count > 0)
 
 class JesterDataModule(LightningDataModule):
@@ -60,7 +61,7 @@ class JesterDataModule(LightningDataModule):
                 padded_videos[idx, :video.shape[0], ...] = video
                 attn_masks[idx, :video.shape[0], ...] = 1
         labels = torch.stack(labels)
-        return padded_videos, attn_masks, labels
+        return padded_videos, labels
 
     def setup(self, **kwargs):
         self.dataloader_kwargs: Dict[str, Any] = dict(

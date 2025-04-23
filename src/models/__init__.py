@@ -20,9 +20,14 @@ def load(model_name: Union[str, AVAILABLE_MODELS], config_kwargs: Dict[str, Any]
         config = Config(**config_kwargs)
         model = Transformer(config)
     elif model_name == AVAILABLE_MODELS.CAUSAL_VIVIT:
-        from .causal_vivit import Transformer, Config
+        from .causal_vivit import Config
         config = Config(**config_kwargs)
-        model = Transformer(config)
+        if config.sparse_inputs:
+            from .causal_vivit import SparseInputTransformer
+            model = SparseInputTransformer(config)
+        else:
+            from .causal_vivit import Transformer
+            model = Transformer(config)
     else:
         assert False
     return model

@@ -2,6 +2,7 @@ from typing import Dict, Any
 from copy import copy
 from math import log10
 
+from tqdm import tqdm
 import yaml
 from lightning import Trainer as LightningTrainer
 from lightning.pytorch.callbacks import ModelCheckpoint, TQDMProgressBar

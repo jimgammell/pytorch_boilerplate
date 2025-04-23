@@ -28,6 +28,7 @@ class SupervisedVideoModule(lightning.LightningModule):
         self.save_hyperparameters()
 
         self.model = models.load(self.hparams.classifier_name, self.hparams.classifier_kwargs)
+        self.automatic_optimization = not self.model.config.sparse_inputs
         if self.hparams.config.compile:
             self.model.compile()
     
@@ -54,24 +55,76 @@ class SupervisedVideoModule(lightning.LightningModule):
         optimizer.step(optimizer_closure)
         optimizer.zero_grad()
     
-    def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
-        x, attn_mask, y = batch
+    def standard_training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
+        x, y = batch
         logits = self.model(x)
         batch_size, timesteps, class_count = logits.shape
         logits = logits.reshape(batch_size*timesteps, class_count)
         y = y.reshape(batch_size, 1).expand(-1, timesteps).reshape(batch_size*timesteps)
-        loss = nn.functional.cross_entropy(logits, y, label_smoothing=0.1)
-        self.log('train_loss', loss, prog_bar=True, on_step=True)
-        self.log('train_acc', get_accuracy(logits, y), prog_bar=True, on_step=True, on_epoch=True)
-        return loss
+        loss = nn.functional.cross_entropy(logits, y, label_smoothing=0.1, reduction='none').reshape(batch_size, timesteps).mean(dim=0)
+        acc = get_accuracy(logits, y, avg_result=False).reshape(batch_size, timesteps).mean(dim=0)
+        self.log('train_loss', loss.mean(), prog_bar=False, on_step=True)
+        self.log('train_loss_final', loss[-1], prog_bar=True, on_step=True)
+        self.log('train_acc', acc.mean(), prog_bar=False, on_step=True, on_epoch=True)
+        self.log('train_acc_final', acc[-1], prog_bar=True, on_step=False, on_epoch=True)
+        return loss.mean()
+    
+    def sparse_input_training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
+        optimizer = self.optimizers()
+        lr_scheduler = self.lr_schedulers()
+        x, y = batch
+        x = self.model.patchifier(x)
+        batch_size, timestep_count, patch_count, embedding_dim = x.shape
+        input_patches = []
+        class_logits = torch.full((batch_size, timestep_count, self.model.config.out_dims), torch.nan, dtype=x.dtype, device=x.device)
+        patch_logits = torch.full((batch_size, timestep_count, self.model.config.patch_count), torch.nan, dtype=x.dtype, device=x.device)
+        per_timestep_loss = torch.full((timestep_count,), torch.nan, dtype=x.dtype, device=x.device)
+        per_timestep_acc = torch.full((timestep_count,), torch.nan, dtype=x.dtype, device=x.device)
+        optimizer.zero_grad()
+        for time_idx in range(timestep_count):
+            input_patches.append(self.model.patch_selector(x[:, 0, :, :], patch_logits=patch_logits[:, time_idx-1, :, :] if time_idx > 0 else None))
+            hidden_acts = torch.cat(input_patches + [
+                torch.zeros(batch_size, timestep_count-len(input_patches), self.model.config.per_frame_patch_count, embedding_dim, dtype=x.dtype, device=x.device)
+            ], dim=1)
+            for layer in self.model.transformer_layers:
+                hidden_acts = layer(hidden_acts)
+            new_class_logits, new_patch_logits = self.model.head(hidden_acts)
+            new_class_logits = new_class_logits[:, time_idx, :]
+            new_patch_logits = new_patch_logits[:, time_idx, :]
+            loss = nn.functional.cross_entropy(new_class_logits, y) / timestep_count
+            self.manual_backward(loss)
+            class_logits[:, time_idx, :] = new_class_logits.detach()
+            if time_idx == 0:
+                patch_logits[:, time_idx, :] = self.model.patch_selector.prior_logits.detach().reshape(1, -1).expand(batch_size, -1)
+            else:
+                patch_logits[:, time_idx, :] = new_patch_logits.detach()
+            per_timestep_loss[time_idx] = loss.detach()
+            per_timestep_acc[time_idx] = get_accuracy(new_class_logits, y)
+            input_patches[-1] = input_patches[-1].detach()
+        optimizer.step()
+        lr_scheduler.step()
+        self.log('train_loss', per_timestep_loss.mean(), prog_bar=False, on_step=True)
+        self.log('train_loss_final', per_timestep_loss[-1], prog_bar=True, on_step=True)
+        self.log('train_acc', per_timestep_acc.mean(), prog_bar=False, on_step=True, on_epoch=True)
+        self.log('train_acc_final', per_timestep_acc[-1], prog_bar=True, on_step=False, on_epoch=True)
+        return per_timestep_loss.mean()
+
+    def training_step(self, *args, **kwargs):
+        if self.model.config.sparse_inputs:
+            return self.sparse_input_training_step(*args, **kwargs)
+        else:
+            return self.standard_training_step(*args, **kwargs)
     
     def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
-        x, attn_mask, y = batch
+        x, y = batch
         logits = self.model(x)
         batch_size, timesteps, class_count = logits.shape
         logits = logits.reshape(batch_size*timesteps, class_count)
         y = y.reshape(batch_size, 1).expand(-1, timesteps).reshape(batch_size*timesteps)
-        loss = nn.functional.cross_entropy(logits, y)
-        self.log('val_loss', loss, prog_bar=False, on_epoch=True)
-        self.log('val_acc', get_accuracy(logits, y), prog_bar=True, on_epoch=True)
-        return loss
+        loss = nn.functional.cross_entropy(logits, y, label_smoothing=0.1, reduction='none').reshape(batch_size, timesteps).mean(dim=0)
+        acc = get_accuracy(logits, y, avg_result=False).reshape(batch_size, timesteps).mean(dim=0)
+        self.log('val_loss', loss.mean(), prog_bar=False, on_step=True)
+        self.log('val_loss_final', loss[-1], prog_bar=True, on_step=True)
+        self.log('val_acc', acc.mean(), prog_bar=False, on_step=True, on_epoch=True)
+        self.log('val_acc_final', acc[-1], prog_bar=True, on_step=False, on_epoch=True)
+        return loss.mean()

@@ -9,4 +9,4 @@ ee350-csme-precision:
   imagenette: /mnt/hdd/datasets/imagenette
   ascadv1: /mnt/hdd/jgammell/leakage_localization/downloads/ascadv1
   ascadv2: /mnt/hdd/jgammell/leakage_localization/downloads/ascadv2
-  jester: /mnt/hdd/datasets/jester
+  jester: /home/jgammell/Desktop/pytorch_boilerplate/resources/jester

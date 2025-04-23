@@ -1,34 +1,21 @@
 import os
 from typing import Literal, Optional, Dict, List, Union, Tuple
+from random import randint
 
 from tqdm import tqdm
 from PIL import Image
 import numpy as np
 import torch
+from torch import nn
 from torch.utils.data import Dataset
-from torchvision import transforms as tv_transforms
+import torchvision.transforms.v2 as tv_transforms
+from torchvision.io import read_file, decode_image
 
 class Jester(Dataset):
     classes: Optional[Dict[str, int]] = None
-    videos: Optional[Dict[int, List[torch.Tensor]]] = None
 
     @staticmethod
-    def load_data_into_ram(root: str):
-        if False: #Jester.videos is None:
-            Jester.videos = {}
-            base_dir = os.path.join(root, '20bn-jester-v1')
-            video_indices = [int(x) for x in os.listdir(base_dir)]
-            for video_index in tqdm(video_indices):
-                subdir = os.path.join(base_dir, f'{video_index}')
-                frame_indices = [int(x.split('.')[0]) for x in os.listdir(subdir) if x.endswith('.jpg')]
-                frame_indices.sort()
-                video_frames = [
-                    torch.from_numpy(np.array(Image.open(os.path.join(subdir, f'{frame_index:05d}.jpg')))).permute(2, 0, 1).contiguous()
-                    for frame_index in frame_indices
-                ]
-                video_tensor = torch.stack(video_frames)
-                video_tensor.share_memory_()
-                Jester.videos[video_index] = video_tensor
+    def split_agnostic_init(root: str):
         if Jester.classes is None:
             label_path = os.path.join(root, 'jester-v1-labels.csv')
             with open(label_path, 'r') as f:
@@ -37,13 +24,14 @@ class Jester(Dataset):
                 }
 
     def __init__(self, 
-        root: str, split: Literal['train', 'val', 'test'] = 'train', dim: int = 128
+        root: str, split: Literal['train', 'val', 'test'] = 'train', dim: int = 128, timesteps: int = 8
     ):
         super().__init__()
         self.root = root
         self.split = split
         self.dim = dim
-        self.load_data_into_ram(self.root)
+        self.timesteps = timesteps
+        self.split_agnostic_init(self.root)
         if self.split in ['train', 'val']:
             if self.split == 'train':
                 labels_file = os.path.join(root, 'jester-v1-train.csv')
@@ -55,7 +43,7 @@ class Jester(Dataset):
                     data_idx, data_label = line.strip().split(';')
                     self.data_indices.append(int(data_idx))
                     self.data_labels.append(Jester.classes[data_label])
-            self.data_indices = torch.tensor(self.data_indices, dtype=torch.long)
+            self.data_indices = np.array(self.data_indices)
             self.data_labels = torch.tensor(self.data_labels, dtype=torch.long)
         elif self.split == 'test':
             labels_file = os.path.join(self.root, 'jester-v1-test.csv')
@@ -65,33 +53,44 @@ class Jester(Dataset):
                 for line in f:
                     data_idx = int(line.strip())
                     self.data_indices.append(data_idx)
-            self.data_indices = torch.tensor(self.data_indices, dtype=torch.long)
+            self.data_indices = np.array(self.data_indices)
         else:
             assert False, self.split
-        self.data_transform = tv_transforms.Compose([
-            tv_transforms.Lambda(lambda x: x.to(torch.float)),
-            tv_transforms.Resize(self.dim, interpolation=tv_transforms.InterpolationMode.BICUBIC),
-            tv_transforms.CenterCrop(self.dim),
-            tv_transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ])
+        self.mean = torch.tensor([0.485, 0.456, 0.406], dtype=torch.float)
+        self.std = torch.tensor([0.229, 0.224, 0.225], dtype=torch.float) + 1.e-6
+        self.mean, self.std = map(lambda x: x.reshape(1, 3, 1, 1), (self.mean, self.std))
+        self.paths = {}
+        for idx in self.data_indices:
+            subdir = os.path.join(self.root, '20bn-jester-v1', f'{idx}')
+            frame_indices = [int(x.split('.')[0]) for x in os.listdir(subdir) if x.endswith('.jpg')]
+            frame_indices.sort()
+            self.paths[idx] = [os.path.join(subdir, f'{frame_idx:05d}.jpg') for frame_idx in frame_indices]
     
     def load_video(self, idx: int) -> torch.Tensor:
-        subdir = os.path.join(self.root, '20bn-jester-v1', f'{idx}')
-        frame_indices = [int(x.split('.')[0]) for x in os.listdir(subdir) if x.endswith('.jpg')]
-        frame_indices.sort()
-        video_frames = []
-        for frame_index in frame_indices:
-            with Image.open(os.path.join(subdir, f'{frame_index:05d}.jpg')) as img:
-                img = img.convert('RGB')
-                img = tv_transforms.functional.to_tensor(img)
-                video_frames.append(img)
-        video_tensor = torch.stack(video_frames)
-        return video_tensor
+        video = []
+        paths = self.paths[idx]
+        if len(paths) > self.timesteps:
+            start_idx = randint(0, len(paths)-self.timesteps)
+            paths = paths[start_idx:start_idx+self.timesteps]
+        elif len(paths) < self.timesteps:
+            paths = [*paths, *((self.timesteps-len(paths))*[paths[-1]])]
+        for frame_path in paths:
+            frame = decode_image(read_file(frame_path), mode='RGB')
+            video.append(frame)
+        video = torch.stack(video)
+        return video
+    
+    def transform_video(self, video: torch.Tensor) -> torch.Tensor:
+        video = video.float().div_(255)
+        video = tv_transforms.functional.resize(video, self.dim)
+        video = tv_transforms.functional.center_crop(video, output_size=self.dim)
+        video = video.sub_(self.mean).div_(self.std)
+        return video
 
     def __getitem__(self, idx: int) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         data_idx = self.data_indices[idx]
         video = self.load_video(data_idx)
-        video = self.data_transform(video)
+        video = self.transform_video(video)
         if self.data_labels is not None:
             label = self.data_labels[idx]
             return video, label
