@@ -4,12 +4,12 @@ default_model_config:
   out_dim: 27
   patch_dim: 16
   max_input_temporal_dim: 32
-  transformer_head_count: 3
+  transformer_head_count: 12
   transformer_layer_count: 12
-  transformer_hidden_dim: 192
+  transformer_hidden_dim: 768
   transformer_mlp_expansion_ratio: 4
-  dropout: 0.0
-  init_from_deit: tiny-distilled
+  dropout: 0.1
+  init_from_deit: base-mae
   include_downsampled_patches: false
   sparse_inputs: false
 default_training_config:
@@ -20,15 +20,15 @@ default_training_config:
     warmup_steps: 0 #4635
     const_steps: 0
     warmup_lr_prop: 0.002
-    final_lr_prop: 0.02
+    final_lr_prop: 0.0
   beta_1: 0.9
   beta_2: 0.999
   eps: 1.e-8
-  weight_decay: 1.e-2
+  weight_decay: 0.05
   grad_clip: null
   compile: true
 datamodule_config:
-  train_batch_size: 128
+  train_batch_size: 32
   eval_batch_size: 128
   num_workers: 8
   pin_memory: true

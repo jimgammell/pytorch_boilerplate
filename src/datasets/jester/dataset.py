@@ -1,6 +1,6 @@
 import os
 from typing import Literal, Optional, Dict, List, Union, Tuple
-from random import randint
+from random import uniform, randint
 
 from tqdm import tqdm
 from PIL import Image
@@ -82,9 +82,33 @@ class Jester(Dataset):
     
     def transform_video(self, video: torch.Tensor) -> torch.Tensor:
         video = video.float().div_(255)
-        video = tv_transforms.functional.resize(video, self.dim)
-        video = tv_transforms.functional.center_crop(video, output_size=self.dim)
         video = video.sub_(self.mean).div_(self.std)
+        if self.split == 'train': # I'm implementing the transforms manually -- torchvision version doesn't support the same random seed for all frames
+            # random horizontal flip
+            if randint(0, 1):
+                video = video.flip(-1)
+            # random resize and crop
+            size = int(uniform(1., 1.25)*self.dim)
+            video = tv_transforms.functional.resize(video, size)
+            start_row_idx = randint(0, size-self.dim)
+            start_col_idx = randint(0, size-self.dim)
+            video = video[:, :, start_row_idx:start_row_idx+self.dim, start_col_idx:start_col_idx+self.dim]
+            # color jitter with brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1, according to ChatGPT
+            b = uniform(0.6, 1.4)
+            c = uniform(0.6, 1.4)
+            s = uniform(0.6, 1.4)
+            h = uniform(-0.1, 0.1)
+            frames = []
+            for frame in video:
+                frame = tv_transforms.functional.adjust_brightness(frame, b)
+                frame = tv_transforms.functional.adjust_contrast(frame, c)
+                frame = tv_transforms.functional.adjust_saturation(frame, s)
+                frame = tv_transforms.functional.adjust_hue(frame, h)
+                frames.append(frame)
+            video = torch.stack(frames)
+        else:
+            video = tv_transforms.functional.resize(video, self.dim)
+            video = tv_transforms.functional.center_crop(video, output_size=self.dim)
         return video
 
     def __getitem__(self, idx: int) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:

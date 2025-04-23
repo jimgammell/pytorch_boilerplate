@@ -14,7 +14,7 @@ class Config:
     transformer_hidden_dim: int = 768
     transformer_mlp_expansion_ratio: int = 4
     dropout: float = 0.0
-    init_from_deit: Optional[Literal['tiny', 'tiny-distilled', 'small', 'small-distilled']] = None
+    init_from_deit: Optional[Literal['tiny', 'tiny-distilled', 'small', 'small-distilled', 'base-mae']] = None
     include_downsampled_patches: bool = False
     sparse_inputs: bool = False
     per_frame_patch_count: Optional[int] = None
@@ -31,7 +31,7 @@ class Config:
         assert isinstance(self.transformer_hidden_dim, int) and (self.transformer_hidden_dim > 0) and (self.transformer_hidden_dim % self.transformer_head_count == 0)
         assert isinstance(self.transformer_mlp_expansion_ratio, int) and (self.transformer_mlp_expansion_ratio > 0)
         assert isinstance(self.dropout, float) and (0 <= self.dropout < 1)
-        assert (self.init_from_deit is None) or (self.init_from_deit in ['tiny', 'tiny-distilled', 'small', 'small-distilled'])
+        assert (self.init_from_deit is None) or (self.init_from_deit in ['tiny', 'tiny-distilled', 'small', 'small-distilled', 'base-mae'])
         assert isinstance(self.include_downsampled_patches, bool)
         assert isinstance(self.sparse_inputs, bool)
         self.patch_count_without_downsampling = (self.input_spatial_dim//self.patch_dim)**2

@@ -39,10 +39,10 @@ class Head(BaseModule):
             self.to_patch_logits = nn.Linear(self.config.transformer_hidden_dim, self.config.patch_count)
     
     def init_weights(self):
-        nn.init.xavier_uniform_(self.to_class_logits.weight)
+        nn.init.trunc_normal_(self.to_class_logits.weight, mean=0., std=0.02)
         nn.init.constant_(self.to_class_logits.bias, 0)
         if self.config.sparse_inputs:
-            nn.init.xavier_uniform_(self.to_patch_logits.weight, mean=0., std=0.02)
+            nn.init.trunc_normal_(self.to_patch_logits.weight, mean=0., std=0.02)
             nn.init.constant_(self.to_patch_logits.bias, 0)
     
     def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
@@ -91,7 +91,7 @@ class Transformer(BaseModule):
         assert dest.shape == src.shape, (dest.shape, src.shape)
         dest.data = src
 
-    def init_with_deit_weights(self, model_size: Literal['tiny', 'tiny-distilled', 'small', 'small-distilled']):
+    def init_with_deit_weights(self, model_size: Literal['tiny', 'tiny-distilled', 'small', 'small-distilled', 'base-mae']):
         if model_size == 'tiny':
             weights_filename = r'deit_tiny_patch16_224-a1311bcf.pth'
         elif model_size == 'tiny-distilled':
@@ -100,9 +100,11 @@ class Transformer(BaseModule):
             weights_filename = r'deit_small_patch16_224-cd65a155.pth'
         elif model_size == 'small-distilled':
             weights_filename = r'deit_small_distilled_patch16_224-649709d9.pth'
+        elif model_size == 'base-mae':
+            weights_filename = r'mae_pretrain_vit_base.pth'
         else:
             assert False
-        weights_path = os.path.join(RESOURCE_DIR, 'diet_pretrained_models', weights_filename)
+        weights_path = os.path.join(RESOURCE_DIR, 'deit_pretrained_models', weights_filename)
         weights = torch.load(weights_path)['model']
         self.load_weight(self.patchifier.patch_embedders[0].weight, weights['patch_embed.proj.weight'])
         self.load_weight(self.patchifier.patch_embedders[0].bias, weights['patch_embed.proj.bias'])
@@ -110,7 +112,7 @@ class Transformer(BaseModule):
             self.patchifier.spatial_position_embedding[:, :, :self.config.patch_count_without_downsampling, :],
             nn.functional.interpolate(
                 weights['pos_embed'].permute(0, 2, 1), size=self.config.patch_count_without_downsampling, mode='linear'
-            ).permute(0, 2, 1).reshape(1, 1, self.config.patch_count_without_downsampling, self.config.transformer_hidden_dim)
+            ).permute(0, 2, 1).contiguous().view(1, 1, self.config.patch_count_without_downsampling, self.config.transformer_hidden_dim)
         )
         for layer_idx, layer in enumerate(self.transformer_layers):
             nn.init.constant_(layer.temporal_attention.to_out.weight, 0)
