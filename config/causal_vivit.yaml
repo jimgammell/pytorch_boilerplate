@@ -3,17 +3,17 @@ default_model_config:
   input_spatial_dim: 128
   out_dim: 27
   patch_dim: 16
-  max_input_temporal_dim: 32
-  transformer_head_count: 12
+  max_input_temporal_dim: 8
+  transformer_head_count: 3
   transformer_layer_count: 12
-  transformer_hidden_dim: 768
+  transformer_hidden_dim: 192
   transformer_mlp_expansion_ratio: 4
   dropout: 0.1
-  init_from_deit: base-mae
+  init_from_deit: tiny-distilled
   include_downsampled_patches: false
   sparse_inputs: false
 default_training_config:
-  training_steps: 92700
+  training_steps: 23175
   base_lr: 1.e-4
   lr_scheduler_name: cosine_decay
   lr_scheduler_kwargs:
@@ -24,17 +24,18 @@ default_training_config:
   beta_1: 0.9
   beta_2: 0.999
   eps: 1.e-8
-  weight_decay: 0.05
+  weight_decay: 0.02
   grad_clip: null
   compile: true
 datamodule_config:
-  train_batch_size: 32
-  eval_batch_size: 128
+  train_batch_size: 512
+  eval_batch_size: 512
   num_workers: 8
   pin_memory: true
   persistent_workers: false
   prefetch_factor: 2
-  timestep_count: 32
+  timestep_count: 8
 dataset_config:
   dim: 128
-  timesteps: 32
+  timesteps: 8
+  prepare: false

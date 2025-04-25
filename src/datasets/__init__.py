@@ -65,7 +65,7 @@ def load(dataset_name: Union[str, AVAILABLE_DATASETS], **kwargs) -> Tuple[Datase
     elif dataset_name == AVAILABLE_DATASETS.JESTER:
         from .jester import Jester, JesterDataModule
         train_dataset = Jester(JESTER_ROOT, split='train', **kwargs)
-        val_dataset = Jester(JESTER_ROOT, split='val', **kwargs)
+        val_dataset = Jester(JESTER_ROOT, split='validation', **kwargs)
         test_dataset = Jester(JESTER_ROOT, split='test', **kwargs)
         return train_dataset, val_dataset, test_dataset, JesterDataModule
     else:

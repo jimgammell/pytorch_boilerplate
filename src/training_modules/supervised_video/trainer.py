@@ -36,6 +36,22 @@ class SupervisedVideoTrainer:
             train_dataset=self.train_dataset, val_dataset=self.val_dataset, test_dataset=self.test_dataset, kwargs=datamodule_config_kwargs
         )
 
+        #print('Testing training dataloader traversal.')
+        #self.datamodule.setup()
+        #train_dataloader = self.datamodule.train_dataloader()
+        #for _ in tqdm(train_dataloader):
+        #    pass
+        #print('Testing validation dataloader traversal.')
+        #self.datamodule.setup()
+        #val_dataloader = self.datamodule.val_dataloader()
+        #for _ in tqdm(val_dataloader):
+        #    pass
+        #print('Testing test dataloader traversal.')
+        #self.datamodule.setup()
+        #test_dataloader = self.datamodule.test_dataloader()
+        #for _ in tqdm(test_dataloader):
+        #    pass
+
     def run(self,
         save_dir: str,
         classifier_config_kwargs: Dict[str, Any] = {},
@@ -116,13 +132,15 @@ class SupervisedVideoTrainer:
     
     def lr_sweep(self,
         save_dir: str,
-        start_lr: float = 1e-6, end_lr: float = 1e-2, lr_count: float = 20,
+        start_lr: float = 1e-5, end_lr: float = 1e-3, lr_count: float = 20,
         classifier_config_kwargs: Dict[str, Any] = {},
         training_config_kwargs: Dict[str, Any] = {},
         may_resume: bool = True
     ):
         os.makedirs(save_dir, exist_ok=True)
+        print('Running learning rate sweep.')
         for lr in np.logspace(log10(start_lr), log10(end_lr), lr_count):
+            print(f'lr={lr} ...')
             subdir = os.path.join(save_dir, f'lr={lr}')
             training_config_kwargs['base_lr'] = float(lr)
             self.run(subdir, classifier_config_kwargs=classifier_config_kwargs, training_config_kwargs=training_config_kwargs, may_resume=may_resume)

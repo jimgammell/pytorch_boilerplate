@@ -40,44 +40,21 @@ class JesterDataModule(LightningDataModule):
         self.test_dataset = test_dataset
         kwargs = kwargs or {}
         self.config = DataModuleConfig(**kwargs)
-    
-    # We need all videos to have the same timestep count so we can stack into batches and use torch.compile.
-    #  I am randomly clipping videos which are too long, and padding videos which are too short.
-    #  This returns an attention mask so we can ignore padding.
-    def collate(self, batch: Sequence[Tuple[torch.Tensor, torch.Tensor]]):
-        videos, labels = zip(*batch)
-        batch_size = len(videos)
-        assert batch_size == len(labels)
-        _, channels, height, width = videos[0].shape
-        assert all((video.shape[1] == channels) and (video.shape[2] == height) and (video.shape[3] == width) for video in videos)
-        padded_videos = torch.zeros((batch_size, self.config.timestep_count, channels, height, width), dtype=videos[0].dtype)
-        attn_masks = torch.zeros((batch_size, self.config.timestep_count), dtype=torch.bool)
-        for idx, video in enumerate(videos):
-            if video.shape[0] > self.config.timestep_count:
-                start = randint(0, video.shape[0]-self.config.timestep_count)
-                padded_videos[idx, ...] = video[start:start+self.config.timestep_count, ...]
-                attn_masks[idx, ...] = 1
-            else:
-                padded_videos[idx, :video.shape[0], ...] = video
-                attn_masks[idx, :video.shape[0], ...] = 1
-        labels = torch.stack(labels)
-        return padded_videos, labels
 
     def setup(self, **kwargs):
         self.dataloader_kwargs: Dict[str, Any] = dict(
             num_workers=self.config.num_workers,
             pin_memory=self.config.pin_memory,
             persistent_workers=self.config.persistent_workers,
-            prefetch_factor=self.config.prefetch_factor,
-            collate_fn=self.collate
+            prefetch_factor=self.config.prefetch_factor
         )
     
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.config.train_batch_size, shuffle=True, **self.dataloader_kwargs)
+        return DataLoader(self.train_dataset, batch_size=self.config.train_batch_size, **self.dataloader_kwargs)
     
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.config.eval_batch_size, shuffle=False, **self.dataloader_kwargs)
+        return DataLoader(self.val_dataset, batch_size=self.config.eval_batch_size, **self.dataloader_kwargs)
     
     def test_dataloader(self):
         assert self.test_dataset is not None
-        return DataLoader(self.test_dataset, batch_size=self.config.eval_batch_size, shuffle=False, **self.dataloader_kwargs)
+        return DataLoader(self.test_dataset, batch_size=self.config.eval_batch_size, **self.dataloader_kwargs)
