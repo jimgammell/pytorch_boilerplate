@@ -36,22 +36,6 @@ class SupervisedVideoTrainer:
             train_dataset=self.train_dataset, val_dataset=self.val_dataset, test_dataset=self.test_dataset, kwargs=datamodule_config_kwargs
         )
 
-        #print('Testing training dataloader traversal.')
-        #self.datamodule.setup()
-        #train_dataloader = self.datamodule.train_dataloader()
-        #for _ in tqdm(train_dataloader):
-        #    pass
-        #print('Testing validation dataloader traversal.')
-        #self.datamodule.setup()
-        #val_dataloader = self.datamodule.val_dataloader()
-        #for _ in tqdm(val_dataloader):
-        #    pass
-        #print('Testing test dataloader traversal.')
-        #self.datamodule.setup()
-        #test_dataloader = self.datamodule.test_dataloader()
-        #for _ in tqdm(test_dataloader):
-        #    pass
-
     def run(self,
         save_dir: str,
         classifier_config_kwargs: Dict[str, Any] = {},

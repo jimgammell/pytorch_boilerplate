@@ -4,6 +4,7 @@ import torch
 from torch import nn
 from xformers import ops as xformers_ops
 from rotary_embedding_torch import RotaryEmbedding
+from reinmax import reinmax
 
 from ..base_module import BaseModule
 from .config import Config
@@ -71,18 +72,13 @@ class PatchSelector(BaseModule):
         batch_size, patch_count, embedding_dim = patchified_frame.shape
         if patch_logits is None:
             patch_logits = self.prior_logits.reshape(1, patch_count).expand(batch_size, -1).clone()
-        dist = torch.zeros(batch_size, self.config.per_frame_patch_count, patch_count, dtype=patchified_frame.dtype, device=patchified_frame.device)
+        dist = []
         # Implementation of ReinMax: https://proceedings.neurips.cc/paper_files/paper/2023/file/28b5dfc51e5ae12d84fb7c6172a00df4-Paper-Conference.pdf
         for idx in range(self.config.per_frame_patch_count):
-            pi_0 = torch.softmax(patch_logits, dim=-1)
-            selection_idx = torch.multinomial(pi_0.detach(), 1)
-            D = torch.zeros(batch_size, patch_count, device=patchified_frame.device, dtype=patchified_frame.dtype).scatter_(1, selection_idx, 1.)
-            pi_1 = 0.5*(D + torch.softmax(patch_logits / self.config.gumbel_temp, dim=-1))
-            pi_1 = torch.softmax((pi_1.log() - patch_logits).detach() + patch_logits, dim=-1)
-            pi_2 = 2*pi_1 - 0.5*pi_0
-            D = pi_2 - pi_2.detach() + D
-            dist[:, idx, :] = dist[:, idx, :] + D
-            patch_logits[torch.arange(batch_size, device=patch_logits.device), D.argmax(dim=-1)] = -1e12
+            D, _ = reinmax(patch_logits, self.config.gumbel_temp)
+            dist.append(D)
+            patch_logits = patch_logits.masked_fill(nn.functional.one_hot(D.argmax(dim=-1), num_classes=patch_count).bool(), -1e12)
+        dist = torch.stack(dist, dim=1)
         dist = dist.view(batch_size, self.config.per_frame_patch_count, patch_count, 1).expand(-1, -1, -1, embedding_dim)
         patch = (dist*patchified_frame.unsqueeze(1)).sum(dim=2)
         return patch
