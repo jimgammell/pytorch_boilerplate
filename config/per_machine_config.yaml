@@ -3,6 +3,7 @@ gautschi:
   imagenet: null
   ascadv1: /scratch/gautschi/jgammell/ascadv1
   ascadv2: /scratch/gautschi/jgammell/ascadv2
+  jester: /scratch/gautschi/jgammell/pytorch_boilerplate/resources/jester
 ee350-csme-precision:
   openwebtext: /mnt/hdd/datasets/openwebtext
   imagenet: /mnt/hdd/datasets/imagenet
