@@ -38,7 +38,9 @@ def load_pretrained_weights(model: BaseModule, pretrained_model: Union[str, Pret
     pretrained_weights_dir = os.path.join(RESOURCE_DIR, 'pretrained_weights')
     pretrained_weights_path = os.path.join(pretrained_weights_dir, url.split('/')[-1])
     download(url, pretrained_weights_path, verbose=True)
-    pretrained_weights = torch.load(pretrained_weights_path, map_location='cpu')['model']
+    pretrained_weights = torch.load(pretrained_weights_path, map_location='cpu')
+    if 'model' in pretrained_weights:
+        pretrained_weights = pretrained_weights['model']
     for patch_embedder in model.patchifier.patch_embedders:
         _load_weight(patch_embedder.weight, pretrained_weights['patch_embed.proj.weight'])
         _load_weight(patch_embedder.bias, pretrained_weights['patch_embed.proj.bias'])
