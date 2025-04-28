@@ -90,6 +90,7 @@ class SupervisedVideoTrainer:
                 )
                 early_stopping_checkpoint = ModelCheckpoint(monitor='val_rank', mode='min', save_top_k=1, dirpath=save_dir, filename='best_checkpoint')
                 progress_bar = TQDMProgressBar(refresh_rate=1) #10)
+                save_model = ModelCheckpoint(dirpath=os.path.join(save_dir, 'checkpoints'), filename='final_checkpoint', save_last=True, save_top_k=0, every_n_epochs=1, save_weights_only=False)
                 trainer = LightningTrainer(
                     max_steps=training_config.training_steps,
                     #log_every_n_steps=100,
@@ -97,8 +98,8 @@ class SupervisedVideoTrainer:
                     precision=training_config.dtype,
                     logger=TensorBoardLogger(save_dir, name='', version=''),
                     check_val_every_n_epoch=1,
-                    enable_checkpointing=False,
-                    callbacks=[]#[early_stopping_checkpoint, progress_bar]
+                    enable_checkpointing=True,
+                    callbacks=[save_model]#[early_stopping_checkpoint, progress_bar]
                 )
                 trainer.fit(training_module, datamodule=self.datamodule, ckpt_path=checkpoint_path)
             else:

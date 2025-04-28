@@ -144,13 +144,11 @@ class Attention(BaseModule):
                 torch.tril(self.config.max_input_temporal_dim, dtype=torch.bool)
             )
         elif self.mode == 'spatiotemporal':
-            data = torch.full((self.config.max_input_temporal_dim*self.config.per_frame_patch_count, self.config.max_input_temporal_dim*self.config.per_frame_patch_count), False, dtype=torch.bool)
-            for i in range(self.config.max_input_temporal_dim):
-                end_i = (i + 1)*self.config.per_frame_patch_count
-                data[i*self.config.max_input_temporal_dim : end_i, :end_i] = True
-            self.register_buffer(
-                'attn_mask',
-                data
+            self.register_buffer('attn_mask',
+                torch.kron(
+                    torch.tril(torch.ones(self.config.max_input_temporal_dim, self.config.max_input_temporal_dim, dtype=torch.bool)),
+                    torch.ones(self.config.per_frame_patch_count, self.config.per_frame_patch_count, dtype=torch.bool)
+                )
             )
         else:
             assert False
