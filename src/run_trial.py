@@ -155,6 +155,9 @@ def main():
         default_training_config_kwargs = config['default_training_config']
         datamodule_config_kwargs = config['datamodule_config']
         dataset_kwargs = config['dataset_config']
+        timesteps = default_model_config_kwargs['max_input_temporal_dim']
+        datamodule_config_kwargs['timestep_count'] = timesteps
+        dataset_kwargs['timesteps'] = timesteps
         train_video_discriminative_model(args, default_training_config_kwargs, default_model_config_kwargs, datamodule_config_kwargs, dataset_kwargs)
     elif args.action  == 'compute-parametric-stats':
         compute_parametric_stats(args)

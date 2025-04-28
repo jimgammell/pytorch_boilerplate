@@ -1,7 +1,9 @@
 from typing import Dict, Any, Tuple
 from dataclasses import dataclass
+from random import randint
 
 import torch
+torch.autograd.set_detect_anomaly(True)
 from torch import nn, optim
 import lightning
 
@@ -73,41 +75,44 @@ class SupervisedVideoModule(lightning.LightningModule):
         optimizer = self.optimizers()
         lr_scheduler = self.lr_schedulers()
         x, y = batch
-        x = self.model.patchifier(x)
-        batch_size, timestep_count, patch_count, embedding_dim = x.shape
+        batch_size, timestep_count, *dims = x.shape
         input_patches = []
-        class_logits = torch.full((batch_size, timestep_count, self.model.config.out_dims), torch.nan, dtype=x.dtype, device=x.device)
-        patch_logits = torch.full((batch_size, timestep_count, self.model.config.patch_count), torch.nan, dtype=x.dtype, device=x.device)
-        per_timestep_loss = torch.full((timestep_count,), torch.nan, dtype=x.dtype, device=x.device)
-        per_timestep_acc = torch.full((timestep_count,), torch.nan, dtype=x.dtype, device=x.device)
+        new_patch_logits = None
+        losses = []
+        accs = []
         optimizer.zero_grad()
+        start_idx = randint(0, 1)
         for time_idx in range(timestep_count):
-            input_patches.append(self.model.patch_selector(x[:, 0, :, :], patch_logits=patch_logits[:, time_idx-1, :, :] if time_idx > 0 else None))
-            hidden_acts = torch.cat(input_patches + [
-                torch.zeros(batch_size, timestep_count-len(input_patches), self.model.config.per_frame_patch_count, embedding_dim, dtype=x.dtype, device=x.device)
+            patchified_x = self.model.patchifier(x)
+            batch_size, timestep_count, patch_count, embedding_dim = patchified_x.shape
+            new_input_patch = self.model.patch_selector(patchified_x[:, time_idx, :, :], patch_logits=new_patch_logits).view(batch_size, 1, self.model.config.per_frame_patch_count, embedding_dim)
+            hidden_acts = torch.cat([x for x in input_patches] + [new_input_patch] + [
+                torch.zeros(batch_size, timestep_count-len(input_patches)-1, self.model.config.per_frame_patch_count, embedding_dim, dtype=x.dtype, device=x.device)
             ], dim=1)
             for layer in self.model.transformer_layers:
                 hidden_acts = layer(hidden_acts)
-            new_class_logits, new_patch_logits = self.model.head(hidden_acts)
-            new_class_logits = new_class_logits[:, time_idx, :]
-            new_patch_logits = new_patch_logits[:, time_idx, :]
-            loss = nn.functional.cross_entropy(new_class_logits, y) / timestep_count
-            self.manual_backward(loss)
-            class_logits[:, time_idx, :] = new_class_logits.detach()
-            if time_idx == 0:
-                patch_logits[:, time_idx, :] = self.model.patch_selector.prior_logits.detach().reshape(1, -1).expand(batch_size, -1)
-            else:
-                patch_logits[:, time_idx, :] = new_patch_logits.detach()
-            per_timestep_loss[time_idx] = loss.detach()
-            per_timestep_acc[time_idx] = get_accuracy(new_class_logits, y)
-            input_patches[-1] = input_patches[-1].detach()
+            _new_class_logits, _new_patch_logits = self.model.head(hidden_acts)
+            new_class_logits = _new_class_logits[:, time_idx, :]
+            new_patch_logits = _new_patch_logits[:, time_idx, :]
+            if (time_idx + start_idx) % 2 == 0:
+                new_loss = 2*nn.functional.cross_entropy(new_class_logits, y)/timestep_count
+                self.manual_backward(new_loss)
+                new_patch_logits = new_patch_logits.detach()
+            with torch.no_grad():
+                input_patches.append(new_input_patch.detach())
+                losses.append(nn.functional.cross_entropy(new_class_logits, y))
+                accs.append(get_accuracy(new_class_logits, y))
         optimizer.step()
         lr_scheduler.step()
-        self.log('train_loss', per_timestep_loss.mean(), prog_bar=False, on_step=True)
-        self.log('train_loss_final', per_timestep_loss[-1], prog_bar=True, on_step=True)
-        self.log('train_acc', per_timestep_acc.mean(), prog_bar=False, on_step=True, on_epoch=True)
-        self.log('train_acc_final', per_timestep_acc[-1], prog_bar=True, on_step=False, on_epoch=True)
-        return per_timestep_loss.mean()
+        avg_loss = sum(losses) / len(losses)
+        final_loss = losses[-1]
+        avg_acc = sum(accs) / len(accs)
+        final_acc = accs[-1]
+        self.log('train_loss', avg_loss, prog_bar=False, on_step=False, on_epoch=True)
+        self.log('train_loss_final', final_loss, prog_bar=True, on_step=True)
+        self.log('train_acc', avg_acc, prog_bar=False, on_step=False, on_epoch=True)
+        self.log('train_acc_final', final_acc, prog_bar=True, on_step=True, on_epoch=True)
+        return None
 
     def training_step(self, *args, **kwargs):
         if self.model.config.sparse_inputs:

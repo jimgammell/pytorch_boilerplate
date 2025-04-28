@@ -64,11 +64,13 @@ class Jester(IterableDataset):
         if self.split == 'train':
             if randint(0, 1):
                 video = video.flip(-1)
-            size = int(uniform(1., 1.25)*self.dim)
-            video = tv_transforms.functional.resize(video, size)
-            start_row_idx = randint(0, size-self.dim)
-            start_col_idx = randint(0, size-self.dim)
-            video = video[:, :, start_row_idx:start_row_idx+self.dim, start_col_idx:start_col_idx+self.dim]
+            #size = int(uniform(1., 1.25)*self.dim)
+            #video = tv_transforms.functional.resize(video, size)
+            #start_row_idx = randint(0, size-self.dim)
+            #start_col_idx = randint(0, size-self.dim)
+            #video = video[:, :, start_row_idx:start_row_idx+self.dim, start_col_idx:start_col_idx+self.dim]
+            video = tv_transforms.functional.resize(video, self.dim)
+            video = tv_transforms.functional.center_crop(video, output_size=self.dim)
         else:
             video = tv_transforms.functional.resize(video, self.dim)
             video = tv_transforms.functional.center_crop(video, output_size=self.dim)

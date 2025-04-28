@@ -14,15 +14,24 @@ class Patchifier(BaseModule):
         super().__init__()
     
     def construct(self):
-        self.patch_embedders = nn.ModuleList([
-            nn.Conv2d(self.config.input_channels, self.config.transformer_hidden_dim, kernel_size=self.config.patch_dim, stride=self.config.patch_dim)
-            for _ in range(self.config.image_resolutions)
+        self.downsamplers = nn.ModuleList([
+            nn.Conv2d(self.config.input_channels, self.config.input_channels, kernel_size=2, stride=2, bias=False
+            ) for res_idx in range(self.config.image_resolutions-1)
         ])
-
+        self.patch_embedders = nn.ModuleList([
+            nn.Conv2d(
+                self.config.input_channels, self.config.transformer_hidden_dim,
+                kernel_size=self.config.patch_dim, stride=self.config.patch_dim
+            ) for res_idx in range(self.config.image_resolutions)
+        ])
         self.dropout = nn.Dropout(self.config.dropout)
         self.spatial_position_embedding = nn.Parameter(torch.empty((1, 1, self.config.patch_count, self.config.transformer_hidden_dim), dtype=torch.float))
+        if self.config.sparse_inputs:
+            self.temporal_position_embedding = nn.Parameter(torch.zeros((1, self.config.max_input_temporal_dim, 1, self.config.transformer_hidden_dim), dtype=torch.float))
     
     def init_weights(self):
+        for downsampler in self.downsamplers:
+            nn.init.constant_(downsampler.weight, 0.25)
         for patch_embedder in self.patch_embedders:
             nn.init.trunc_normal_(patch_embedder.weight, mean=0., std=0.02)
             nn.init.constant_(patch_embedder.bias, 0)
@@ -34,16 +43,16 @@ class Patchifier(BaseModule):
         assert channels == self.config.input_channels
         assert height == width == self.config.input_spatial_dim
         x = x.view(batch_size*timesteps, channels, height, width)
-        embedded_patches = torch.zeros(batch_size, timesteps, self.config.patch_count, self.config.transformer_hidden_dim, dtype=x.dtype, device=x.device)
-        idx = 0
+        embedded_patches = []
         for res_idx in range(self.config.image_resolutions):
-            embedded_x = self.patch_embedders[res_idx](x).view(batch_size, timesteps, self.config.transformer_hidden_dim, -1).permute(0, 1, 3, 2).contiguous()
-            patch_count = embedded_x.size(2)
-            embedded_patches[:, :, idx:idx+patch_count, :] = embedded_patches[:, :, idx:idx+patch_count, :] + embedded_x
+            embedded_patch = self.patch_embedders[res_idx](x).view(batch_size, timesteps, self.config.transformer_hidden_dim, -1).permute(0, 1, 3, 2).contiguous()
+            embedded_patches.append(embedded_patch)
             if res_idx < self.config.image_resolutions-1:
-                x = nn.functional.avg_pool2d(x, kernel_size=2, stride=2)
-                idx += patch_count
+                x = self.downsamplers[res_idx](x)
+        embedded_patches = torch.cat(embedded_patches, dim=2)
         embedded_patches = embedded_patches + self.spatial_position_embedding
+        if self.config.sparse_inputs:
+            embedded_patches = embedded_patches + self.temporal_position_embedding
         embedded_patches = self.dropout(embedded_patches)
         return embedded_patches
 
@@ -61,30 +70,21 @@ class PatchSelector(BaseModule):
     def forward(self, patchified_frame: torch.Tensor, patch_logits: Optional[torch.Tensor] = None) -> torch.Tensor:
         batch_size, patch_count, embedding_dim = patchified_frame.shape
         if patch_logits is None:
-            patch_logits = self.prior_logits.reshape(1, patch_count).expand(batch_size, -1)
-        with torch.autocast(enabled=False, device_type='cuda'): # 32-bit precision isn't enough for this
-            u = torch.rand(patch_logits.shape, device=patch_logits.device, dtype=torch.float64).clamp(1e-12, 1.-1e-12)
-            gumbel_noise = -torch.log(-torch.log(u))
-            gumbel_noise = gumbel_noise.to(patch_logits.dtype)
-        soft_sample = torch.softmax((patch_logits + gumbel_noise)/self.config.gumbel_temp, dim=-1)
-        if self.training:
-            if self.config.gumbel_estimator == 'soft':
-                assert self.config.per_frame_patch_count == 1
-                dist = soft_sample
-            elif self.config.gumbel_estimator == 'hard':
-                with torch.no_grad():
-                    idx = soft_sample.topk(self.config.per_frame_patch_count, dim=-1).indices
-                    hard_sample = torch.zeros_like(soft_sample).scatter_(-1, idx, 1.0)
-                    print([idx.shape, hard_sample.shape])
-                dist = hard_sample + soft_sample - soft_sample.detach()
-            else:
-                assert False
-        else:
-            idx = soft_sample.topk(self.config.per_frame_patch_count, dim=-1).indices
-            dist = torch.zeros_like(soft_sample).scatter_(-1, idx, 1.0)
-        print([dist.shape, patchified_frame.shape])
-        dist = dist.reshape(batch_size, patch_count, 1).expand(-1, -1, embedding_dim)
-        patch = (dist*patchified_frame).sum(dim=1)
+            patch_logits = self.prior_logits.reshape(1, patch_count).expand(batch_size, -1).clone()
+        dist = torch.zeros(batch_size, self.config.per_frame_patch_count, patch_count, dtype=patchified_frame.dtype, device=patchified_frame.device)
+        # Implementation of ReinMax: https://proceedings.neurips.cc/paper_files/paper/2023/file/28b5dfc51e5ae12d84fb7c6172a00df4-Paper-Conference.pdf
+        for idx in range(self.config.per_frame_patch_count):
+            pi_0 = torch.softmax(patch_logits, dim=-1)
+            selection_idx = torch.multinomial(pi_0.detach(), 1)
+            D = torch.zeros(batch_size, patch_count, device=patchified_frame.device, dtype=patchified_frame.dtype).scatter_(1, selection_idx, 1.)
+            pi_1 = 0.5*(D + torch.softmax(patch_logits / self.config.gumbel_temp, dim=-1))
+            pi_1 = torch.softmax((pi_1.log() - patch_logits).detach() + patch_logits, dim=-1)
+            pi_2 = 2*pi_1 - 0.5*pi_0
+            D = pi_2 - pi_2.detach() + D
+            dist[:, idx, :] = dist[:, idx, :] + D
+            patch_logits[torch.arange(batch_size, device=patch_logits.device), D.argmax(dim=-1)] = -1e12
+        dist = dist.view(batch_size, self.config.per_frame_patch_count, patch_count, 1).expand(-1, -1, -1, embedding_dim)
+        patch = (dist*patchified_frame.unsqueeze(1)).sum(dim=2)
         return patch
 
 class NormLayer(BaseModule):
@@ -129,9 +129,9 @@ class FeedForward(BaseModule):
         return x
 
 class Attention(BaseModule):
-    def __init__(self, config: Config, mode: Literal['spatial', 'temporal'] = 'spatial'):
+    def __init__(self, config: Config, mode: Literal['spatial', 'temporal', 'spatiotemporal'] = 'spatial'):
         self.config = config
-        self.mode = mode
+        self.mode = mode if not self.config.sparse_inputs else 'spatiotemporal'
         super().__init__()
     
     def construct(self):
@@ -140,6 +140,24 @@ class Attention(BaseModule):
         self.out_dropout = nn.Dropout(self.config.dropout)
         if self.mode == 'temporal':
             self.rope = RotaryEmbedding(dim=self.config.transformer_head_dim)
+        if self.mode == 'spatial':
+            self.attn_mask = None
+        elif self.mode == 'temporal':
+            self.register_buffer(
+                'attn_mask',
+                torch.tril(self.config.max_input_temporal_dim, dtype=torch.bool)
+            )
+        elif self.mode == 'spatiotemporal':
+            data = torch.full((self.config.max_input_temporal_dim*self.config.per_frame_patch_count, self.config.max_input_temporal_dim*self.config.per_frame_patch_count), False, dtype=torch.bool)
+            for i in range(self.config.max_input_temporal_dim):
+                end_i = (i + 1)*self.config.per_frame_patch_count
+                data[i*self.config.max_input_temporal_dim : end_i, :end_i] = True
+            self.register_buffer(
+                'attn_mask',
+                data
+            )
+        else:
+            assert False
     
     def init_weights(self):
         nn.init.trunc_normal_(self.to_qkv.weight, mean=0., std=0.02)
@@ -149,30 +167,39 @@ class Attention(BaseModule):
     
     def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         batch_size, timesteps, tokens_per_timestep, embedding_dim = x.shape
-        assert timesteps == self.config.max_input_temporal_dim
         assert embedding_dim == self.config.transformer_hidden_dim
         if self.mode == 'spatial': # treat the timestep axis as a minibatch axis
             x = x.view(batch_size*timesteps, tokens_per_timestep, embedding_dim)
         elif self.mode == 'temporal': # treat the spatial axis as a minibatch axis
             x = x.permute(0, 2, 1, 3).contiguous().view(batch_size*tokens_per_timestep, timesteps, embedding_dim)
+        elif self.mode == 'spatiotemporal':
+            x = x.view(batch_size, timesteps*tokens_per_timestep, embedding_dim)
         else:
             assert False
         eff_batch_size, eff_seq_len, embedding_dim = x.shape
         q, k, v = (
             self.to_qkv(x)
             .view(eff_batch_size, eff_seq_len, 3, self.config.transformer_head_count, self.config.transformer_head_dim)
+            .permute(0, 3, 2, 1, 4)
+            .contiguous()
             .unbind(2)
         )
         if self.mode == 'temporal':
             q = self.rope.rotate_queries_or_keys(q)
             k = self.rope.rotate_queries_or_keys(k)
+        if self.attn_mask is not None:
+            attn_mask = self.attn_mask.view(1, 1, eff_seq_len, eff_seq_len).expand(batch_size, -1, -1, -1)
+        else:
+            attn_mask = None
         pre_out = (
-            xformers_ops.memory_efficient_attention(q, k, v, attn_bias=xformers_ops.LowerTriangularMask() if self.mode == 'temporal' else None, p=self.config.dropout if self.training else 0.)
+            nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=self.config.dropout if self.training else 0., is_causal=False)
+            .permute(0, 2, 1, 3)
+            .contiguous()
             .view(eff_batch_size, eff_seq_len, embedding_dim)
         )
         out = self.to_out(pre_out)
         out = self.out_dropout(out)
-        if self.mode == 'spatial':
+        if self.mode in ['spatial', 'spatiotemporal']:
             out = out.view(batch_size, timesteps, tokens_per_timestep, embedding_dim)
         elif self.mode == 'temporal':
             out = out.view(batch_size, tokens_per_timestep, timesteps, embedding_dim).permute(0, 2, 1, 3).contiguous()
