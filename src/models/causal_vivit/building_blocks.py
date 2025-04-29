@@ -27,7 +27,7 @@ class Patchifier(BaseModule):
         ])
         self.dropout = nn.Dropout(self.config.dropout)
         self.spatial_position_embedding = nn.Parameter(torch.empty((1, 1, self.config.patch_count, self.config.transformer_hidden_dim), dtype=torch.float))
-        if self.config.sparse_inputs:
+        if self.config.sparse_inputs and not isinstance(self.config.per_frame_patch_count, list):
             self.temporal_position_embedding = nn.Parameter(torch.zeros((1, self.config.max_input_temporal_dim, 1, self.config.transformer_hidden_dim), dtype=torch.float))
     
     def init_weights(self):
@@ -52,7 +52,7 @@ class Patchifier(BaseModule):
                 x = self.downsamplers[res_idx](x)
         embedded_patches = torch.cat(embedded_patches, dim=2)
         embedded_patches = embedded_patches + self.spatial_position_embedding
-        if self.config.sparse_inputs:
+        if self.config.sparse_inputs and not isinstance(self.config.per_frame_patch_count, list):
             embedded_patches = embedded_patches + self.temporal_position_embedding
         embedded_patches = self.dropout(embedded_patches)
         return embedded_patches
@@ -60,6 +60,7 @@ class Patchifier(BaseModule):
 class PatchSelector(BaseModule):
     def __init__(self, config: Config):
         self.config = config
+        self.per_frame_patch_count = self.config.per_frame_patch_count if isinstance(self.config.per_frame_patch_count, int) else self.config.per_frame_patch_count[0]
         super().__init__()
     
     def construct(self):
@@ -74,12 +75,24 @@ class PatchSelector(BaseModule):
             patch_logits = self.prior_logits.reshape(1, patch_count).expand(batch_size, -1).clone()
         dist = []
         # Implementation of ReinMax: https://proceedings.neurips.cc/paper_files/paper/2023/file/28b5dfc51e5ae12d84fb7c6172a00df4-Paper-Conference.pdf
-        for idx in range(self.config.per_frame_patch_count):
-            D, _ = reinmax(patch_logits, self.config.gumbel_temp)
+        for idx in range(self.per_frame_patch_count):
+            if self.config.patch_selection_gradient_estimator == 'reinmax':
+                D, _ = reinmax(patch_logits, self.config.gumbel_temp)
+            elif self.config.patch_selection_gradient_estimator == 'zgr': # adapted from https://github.com/shekhovt/ZGR/blob/main/zgr.py
+                logp = patch_logits - torch.logsumexp(patch_logits, dim=-1, keepdim=True)
+                p = logp.exp()
+                dx_ST = p
+                index = torch.distributions.categorical.Categorical(probs=p, validate_args=False).sample()
+                num_classes = patch_logits.shape[-1]
+                y = nn.functional.one_hot(index, num_classes=num_classes).to(p)
+                logpx = logp.gather(-1, index.unsqueeze(-1))
+                dx_RE = (y - p.detach()) * logpx
+                dx = (dx_ST + dx_RE)/2
+                D = y + (dx - dx.detach())
             dist.append(D)
             patch_logits = patch_logits.masked_fill(nn.functional.one_hot(D.argmax(dim=-1), num_classes=patch_count).bool(), -1e12)
         dist = torch.stack(dist, dim=1)
-        dist = dist.view(batch_size, self.config.per_frame_patch_count, patch_count, 1).expand(-1, -1, -1, embedding_dim)
+        dist = dist.view(batch_size, self.per_frame_patch_count, patch_count, 1).expand(-1, -1, -1, embedding_dim)
         patch = (dist*patchified_frame.unsqueeze(1)).sum(dim=2)
         return patch
 
@@ -127,7 +140,7 @@ class FeedForward(BaseModule):
 class Attention(BaseModule):
     def __init__(self, config: Config, mode: Literal['spatial', 'temporal', 'spatiotemporal'] = 'spatial'):
         self.config = config
-        self.mode = mode if not self.config.sparse_inputs else 'spatiotemporal'
+        self.mode = mode
         super().__init__()
     
     def construct(self):
@@ -139,10 +152,11 @@ class Attention(BaseModule):
         if self.mode == 'spatial':
             self.attn_mask = None
         elif self.mode == 'temporal':
-            self.register_buffer(
-                'attn_mask',
-                torch.tril(self.config.max_input_temporal_dim, dtype=torch.bool)
-            )
+            self.attn_mask = None
+            #self.register_buffer(
+            #    'attn_mask',
+            #    torch.tril(self.config.max_input_temporal_dim, dtype=torch.bool)
+            #)
         elif self.mode == 'spatiotemporal':
             self.register_buffer('attn_mask',
                 torch.kron(
@@ -186,7 +200,7 @@ class Attention(BaseModule):
         else:
             attn_mask = None
         pre_out = (
-            nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=self.config.dropout if self.training else 0., is_causal=False)
+            nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=self.config.dropout if self.training else 0., is_causal=self.mode=='temporal')
             .permute(0, 2, 1, 3)
             .contiguous()
             .view(eff_batch_size, eff_seq_len, embedding_dim)

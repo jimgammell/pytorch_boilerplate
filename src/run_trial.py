@@ -89,6 +89,9 @@ def main():
         '--config-file', action='store', default=None, choices=AVAILABLE_CONFIG_NAMES,
         help=f'Which hyperparameter config file to use: `{os.path.join(CONFIG_DIR, "<CONFIG_FILE>.yaml")}`. This file must exist and be properly set up.'
     )
+    supervised_classification_parser.add_argument(
+        '--override-config', action='store', nargs='*', default=[], help='Override one of the configuration settings for this trial.'
+    )
     sequential_image_classification_parser = subparsers.add_parser('sequential-image-classify')
     sequential_image_classification_parser.add_argument(
         '--dataset', action='store', default=None, type=str, choices=[x.value for x in datasets.AVAILABLE_DATASETS],
@@ -123,6 +126,11 @@ def main():
         config_path = os.path.join(CONFIG_DIR, f'{config_name}.yaml')
         with open(config_path, 'r') as f:
             config = yaml.load(f, Loader=yaml.FullLoader)
+        config = flatten_dict(config)
+        for setting in args.override_config:
+            key, val = setting.split('=')
+            config['.'+key] = yaml.safe_load(val)
+        config = unflatten_dict(config)['']
         default_model_config_kwargs = config['default_model_config']
         default_training_config_kwargs = config['default_training_config']
         datamodule_config_kwargs = config['datamodule_config']

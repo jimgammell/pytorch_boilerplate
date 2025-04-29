@@ -22,7 +22,10 @@ def load(model_name: Union[str, AVAILABLE_MODELS], config_kwargs: Dict[str, Any]
     elif model_name == AVAILABLE_MODELS.CAUSAL_VIVIT:
         from .causal_vivit import Config
         config = Config(**config_kwargs)
-        if config.sparse_inputs:
+        if config.sparse_inputs and isinstance(config.per_frame_patch_count, list):
+            from .causal_vivit import DecomposedSparseInputTransformer
+            model = DecomposedSparseInputTransformer(config)
+        elif config.sparse_inputs:
             from .causal_vivit import SparseInputTransformer
             model = SparseInputTransformer(config)
         else:

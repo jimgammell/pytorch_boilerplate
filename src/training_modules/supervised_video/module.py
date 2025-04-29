@@ -72,6 +72,12 @@ class SupervisedVideoModule(lightning.LightningModule):
         return loss.mean()
     
     def sparse_input_training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
+        if isinstance(self.model.config.per_frame_patch_count, list):
+            idx = int(len(self.model.config.per_frame_patch_count) * self.global_step / self.trainer.max_steps)
+            per_frame_patch_count = self.model.config.per_frame_patch_count[idx]
+            self.model.patch_selector.per_frame_patch_count = per_frame_patch_count
+        else:
+            per_frame_patch_count = self.model.config.per_frame_patch_count
         optimizer = self.optimizers()
         lr_scheduler = self.lr_schedulers()
         x, y = batch
@@ -85,9 +91,9 @@ class SupervisedVideoModule(lightning.LightningModule):
         for time_idx in range(timestep_count):
             patchified_x = self.model.patchifier(x)
             batch_size, timestep_count, patch_count, embedding_dim = patchified_x.shape
-            new_input_patch = self.model.patch_selector(patchified_x[:, time_idx, :, :], patch_logits=new_patch_logits).view(batch_size, 1, self.model.config.per_frame_patch_count, embedding_dim)
+            new_input_patch = self.model.patch_selector(patchified_x[:, time_idx, :, :], patch_logits=new_patch_logits).view(batch_size, 1, per_frame_patch_count, embedding_dim)
             hidden_acts = torch.cat([x for x in input_patches] + [new_input_patch] + [
-                torch.zeros(batch_size, timestep_count-len(input_patches)-1, self.model.config.per_frame_patch_count, embedding_dim, dtype=x.dtype, device=x.device)
+                torch.zeros(batch_size, timestep_count-len(input_patches)-1, per_frame_patch_count, embedding_dim, dtype=x.dtype, device=x.device)
             ], dim=1)
             for layer in self.model.transformer_layers:
                 hidden_acts = layer(hidden_acts)

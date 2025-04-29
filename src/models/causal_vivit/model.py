@@ -34,7 +34,7 @@ class SpatiotemporalTransformerBlock(BaseModule):
     
     def construct(self):
         self.pre_attn_norm = NormLayer(self.config)
-        self.attn = Attention(self.config)
+        self.attn = Attention(self.config, mode='spatiotemporal')
         self.pre_fnn_norm = NormLayer(self.config)
         self.fnn = FeedForward(self.config)
     
@@ -118,7 +118,7 @@ class SparseInputTransformer(Transformer):
     def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         x = self.patchifier(x)
         batch_size, timestep_count, patch_count, embedding_dim = x.shape
-        input = torch.full((batch_size, timestep_count, self.config.per_frame_patch_count, embedding_dim), 0, dtype=x.dtype, device=x.device)
+        input = torch.full((batch_size, timestep_count, self.patch_selector.per_frame_patch_count, embedding_dim), 0, dtype=x.dtype, device=x.device)
         class_logits = torch.full((batch_size, timestep_count, self.config.out_dim), 0, dtype=x.dtype, device=x.device)
         patch_logits = torch.full((batch_size, timestep_count, self.config.patch_count), 0, dtype=x.dtype, device=x.device)
         for time_idx in range(timestep_count):
@@ -130,3 +130,14 @@ class SparseInputTransformer(Transformer):
             class_logits[:, time_idx, :] = new_class_logits[:, time_idx, :]
             patch_logits[:, time_idx, :] = new_patch_logits[:, time_idx, :]
         return class_logits
+
+# Uses decomposed spatial + temporal attention. This is useful because in this case it is still feasible to train with large spatial patch count.
+#   It seems like training with small patch count is absurdly slow, so I want to do this so that we can gradually decay the patch count over time.
+class DecomposedSparseInputTransformer(SparseInputTransformer):
+    def construct(self):
+        self.patchifier = Patchifier(self.config)
+        self.patch_selector = PatchSelector(self.config)
+        self.transformer_layers = nn.ModuleList(
+            TransformerBlock(self.config) for _ in range(self.config.transformer_layer_count)
+        )
+        self.head = Head(self.config)

@@ -1,4 +1,4 @@
-from typing import Optional, Literal, Union
+from typing import Optional, Literal, Union, List
 from dataclasses import dataclass
 from math import log2, isfinite
 from enum import Enum
@@ -58,10 +58,11 @@ class Config:
     dropout: float = 0.0
     include_downsampled_patches: bool = False
     sparse_inputs: bool = False
-    per_frame_patch_count: Optional[int] = None
+    per_frame_patch_count: Optional[Union[int, List[int]]] = None
     gumbel_temp: Optional[float] = None
     vit_conf: Optional[Union[str, ViTConf]] = None
     pretrained_model: Optional[Union[str, PretrainedModelURLs]] = None
+    patch_selection_gradient_estimator: Literal['reinmax', 'zgr'] = 'reinmax'
 
     def __post_init__(self):
         if self.vit_conf is not None:
@@ -85,6 +86,7 @@ class Config:
         assert isinstance(self.dropout, float) and (0 <= self.dropout < 1)
         assert isinstance(self.include_downsampled_patches, bool)
         assert isinstance(self.sparse_inputs, bool)
+        assert self.patch_selection_gradient_estimator in ['reinmax', 'zgr']
         self.patch_count_without_downsampling = (self.input_spatial_dim//self.patch_dim)**2
         if self.include_downsampled_patches:
             self.image_resolutions = int(log2(self.input_spatial_dim//self.patch_dim)) + 1
@@ -93,7 +95,10 @@ class Config:
         self.patch_count = sum((self.input_spatial_dim//(self.patch_dim*2**x))**2 for x in range(self.image_resolutions))
         self.transformer_head_dim = self.transformer_hidden_dim//self.transformer_head_count
         if self.sparse_inputs:
-            assert isinstance(self.per_frame_patch_count, int) and (1 <= self.per_frame_patch_count < self.patch_count)
+            assert any((
+                isinstance(self.per_frame_patch_count, int) and (1 <= self.per_frame_patch_count <= self.patch_count),
+                isinstance(self.per_frame_patch_count, list) and all(isinstance(x, int) and (1 <= x <= self.patch_count) for x in self.per_frame_patch_count)
+            ))
             assert isinstance(self.gumbel_temp, float) and (0. < self.gumbel_temp) and isfinite(self.gumbel_temp)
         else:
             assert self.per_frame_patch_count is None
