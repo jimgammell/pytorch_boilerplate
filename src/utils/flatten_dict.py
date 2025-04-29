@@ -28,5 +28,5 @@ def unflatten_dict(
             if not(part in current_level):
                 current_level[part] = {}
             current_level = current_level[part]
-        current_level[parts[:-1]] = val
+        current_level[parts[-1]] = val
     return unflattened_dict

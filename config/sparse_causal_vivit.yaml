@@ -1,3 +1,5 @@
+nn_arch: causal-vivit
+dataset: jester
 default_model_config:
   input_channels: 3
   input_spatial_dim: 128
@@ -11,8 +13,8 @@ default_model_config:
   per_frame_patch_count: 8
   gumbel_temp: 1.0
 default_training_config:
-  training_steps: 200000
-  base_lr: 1.e-4
+  training_steps: 20000
+  base_lr: 1.e-5
   lr_scheduler_name: cosine_decay
   lr_scheduler_kwargs:
     warmup_steps: 1000
@@ -23,7 +25,7 @@ default_training_config:
   beta_2: 0.999
   eps: 1.e-8
   weight_decay: 0.0
-  grad_clip: null
+  grad_clip: 1.0
   compile: true
 datamodule_config:
   train_batch_size: 512
