@@ -71,12 +71,8 @@ class SupervisedVideoTrainer:
                     can_run = False
                 else:
                     checkpoint_steps = [int(f.split('=')[-1].split('.')[0]) for f in os.listdir(save_dir) if f.split('=')[0] == 'step' and f.split('.')[-1] == 'ckpt']
-                    if os.path.exists(os.path.join(save_dir, 'final_checkpoint.ckpt')):
-                        checkpoint_path = os.path.join(save_dir, 'final_checkpoint.ckpt')
-                    elif len(checkpoint_steps) > 0:
-                        checkpoint_path = os.path.join(save_dir, f'step={max(checkpoint_steps)}.ckpt')
-                    elif os.path.exists(os.path.join(save_dir, 'initial_checkpoint.ckpt')):
-                        checkpoint_path = os.path.join(save_dir, 'initial_checkpoint.ckpt')
+                    if os.path.exists(os.path.join(save_dir, 'checkpoints', 'last.ckpt')):
+                        checkpoint_path = os.path.join(save_dir, 'checkpoints', 'last.ckpt')
                     if checkpoint_path is not None:
                         logger.info(f'There is a partially-complete trial in {save_dir} with the same hyperparameters as the current trial. Resuming training from {checkpoint_path}.')
         if can_run:

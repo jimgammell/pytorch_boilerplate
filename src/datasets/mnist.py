@@ -10,7 +10,7 @@ import lightning as L
 
 from common import *
 
-ROOT = Constant(os.path.join(RESOURCE_DIR, 'mnist'))
+ROOT = os.path.join(RESOURCE_DIR, 'mnist')
 os.makedirs(ROOT, exist_ok=True)
 
 def download():

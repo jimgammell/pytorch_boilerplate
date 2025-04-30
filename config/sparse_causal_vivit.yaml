@@ -14,7 +14,7 @@ default_model_config:
   gumbel_temp: 1.0
 default_training_config:
   training_steps: 100000
-  base_lr: 2.e-5
+  base_lr: 3.e-5
   lr_scheduler_name: cosine_decay
   lr_scheduler_kwargs:
     warmup_steps: 1000

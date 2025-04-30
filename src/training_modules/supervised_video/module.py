@@ -33,7 +33,7 @@ class SupervisedVideoModule(lightning.LightningModule):
         self.automatic_optimization = not self.model.config.sparse_inputs
         if self.hparams.config.compile:
             self.model.compile()
-    
+
     def configure_optimizers(self):
         yes_weight_decay, no_weight_decay = self.model.get_params_based_on_should_weight_decay()
         param_groups = [

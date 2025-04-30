@@ -24,9 +24,9 @@ default_training_config:
   beta_1: 0.9
   beta_2: 0.999
   eps: 1.e-8
-  weight_decay: 0.0
+  weight_decay: 0.01
   grad_clip: 1.0
-  compile: true
+  compile: false
 datamodule_config:
   train_batch_size: 128
   eval_batch_size: 256
