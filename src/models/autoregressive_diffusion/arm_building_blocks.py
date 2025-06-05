@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Literal
 import os
 
 import torch
@@ -22,6 +22,7 @@ class Config:
     dropout_rate: float = 0.0
     bias: bool = False
     pretrained_model_path: Optional[str] = None
+    pretrained_gpt2_size: Optional[Literal['s', 'm', 'l', 'xl']] = None
 
     def __post_init__(self):
         assert isinstance(self.block_size, int) and (self.block_size > 0)
@@ -33,6 +34,13 @@ class Config:
         assert isinstance(self.bias, bool)
         if self.pretrained_model_path is not None:
             assert os.path.exists(self.pretrained_model_path)
+        if self.pretrained_gpt2_size is not None:
+            kwargs = GPT2_DEFAULT_KWARGS[self.pretrained_gpt2_size]
+            for k, v in kwargs.items():
+                if hasattr(self, k):
+                    assert getattr(self, k) == v
+                else:
+                    setattr(self, k, v)
 
 class Norm(nn.Module):
     def __init__(self, config: Config):
@@ -56,7 +64,7 @@ class Attention(nn.Module):
         batch_size, token_count, embedding_dim = x.shape
         assert embedding_dim == self.config.embedding_dim
         q, k, v = map(
-            lambda x: x.view(batch_size, token_count, embedding_dim//self.config.head_count).transpose(1, 2),   
+            lambda x: x.view(batch_size, token_count, self.config.head_count, embedding_dim//self.config.head_count).transpose(1, 2),   
             self.to_qkv(x).split(embedding_dim, dim=2)
         )
         pre_out = nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.config.dropout_rate if self.training else 0., is_causal=True)

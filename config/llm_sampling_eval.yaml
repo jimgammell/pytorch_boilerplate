@@ -1,0 +1,4 @@
+pretrained_arm_path: /home/jgammell/Desktop/pytorch_boilerplate/resources/gpt2/gpt2xl_pretrained.pt
+arm_kwargs:
+  dropout_rate: 0.0
+pretrained_gpt2_size: xl

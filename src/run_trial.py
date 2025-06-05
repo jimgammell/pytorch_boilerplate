@@ -124,6 +124,11 @@ def main():
     supervised_video_parser.add_argument(
         '--override-config', action='store', nargs='*', default=[], help='Override one of the configuration settings for this trial.'
     )
+    text_generation_parser = subparsers.add_parser('text-generation-trial')
+    text_generation_parser.add_argument(
+        '--config-file', action='store', default=None, choices=AVAILABLE_CONFIG_NAMES,
+        help=f'Which hyperparameter config file to use: `{os.path.join(CONFIG_DIR, "<CONFIG_FILE>.yaml")}`. This file must exist and be properly set up.'
+    )
     args = parser.parse_args()
 
     if args.action in ['supervised-classify']:
@@ -171,7 +176,7 @@ def main():
         datamodule_config_kwargs['timestep_count'] = timesteps
         dataset_kwargs['timesteps'] = timesteps
         train_video_discriminative_model(args, config['nn_arch'], config['dataset'], default_training_config_kwargs, default_model_config_kwargs, datamodule_config_kwargs, dataset_kwargs)
-    elif args.action  == 'text_generation_trial':
+    elif args.action  == 'text-generation-trial':
         config_name = args.config_file
         output_dir = os.path.join(OUTPUT_DIR, f'{config_name}')
         config_path = os.path.join(CONFIG_DIR, f'{config_name}.yaml')
