@@ -1,7 +1,9 @@
 from typing import Dict, Any, Tuple
 from dataclasses import dataclass
 from random import randint
+from itertools import chain
 
+import numpy as np
 import torch
 torch.autograd.set_detect_anomaly(True)
 from torch import nn, optim
@@ -30,6 +32,10 @@ class SupervisedVideoModule(lightning.LightningModule):
         self.save_hyperparameters()
 
         self.model = models.load(self.hparams.classifier_name, self.hparams.classifier_kwargs)
+        if self.model.config.pretrained_lightning_module_path is not None:
+            mod = SupervisedVideoModule.load_from_checkpoint(self.model.config.pretrained_lightning_module_path)
+            pretrain_state_dict = mod.model.state_dict()
+            self.model.load_state_dict({k: v for k, v in pretrain_state_dict.items() if k != 'head.attention_pool.q'}, strict=False)
         self.automatic_optimization = not self.model.config.sparse_inputs
         if self.hparams.config.compile:
             self.model.compile()
@@ -71,7 +77,7 @@ class SupervisedVideoModule(lightning.LightningModule):
         self.log('train_acc_final', acc[-1], prog_bar=True, on_step=False, on_epoch=True)
         return loss.mean()
     
-    def sparse_input_training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
+    def sparse_input_training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int):
         if isinstance(self.model.config.per_frame_patch_count, list):
             idx = int(len(self.model.config.per_frame_patch_count) * self.global_step / self.trainer.max_steps)
             per_frame_patch_count = self.model.config.per_frame_patch_count[idx]
@@ -118,7 +124,37 @@ class SupervisedVideoModule(lightning.LightningModule):
         self.log('train_loss_final', final_loss, prog_bar=True, on_step=True)
         self.log('train_acc', avg_acc, prog_bar=False, on_step=False, on_epoch=True)
         self.log('train_acc_final', final_acc, prog_bar=True, on_step=True, on_epoch=True)
-        return None
+    
+    def random_sequence_prediction(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int):
+        x, y = batch
+        patches = []
+        losses = []
+        accs = []
+        patchified_x = self.model.patchifier(x)
+        batch_size, timestep_count, patch_count, embedding_dim = patchified_x.shape
+        per_frame_patch_count = self.model.patch_selector.per_frame_patch_count
+        for time_idx in range(timestep_count):
+            D = nn.functional.one_hot(
+                torch.from_numpy(np.stack([np.random.choice(patch_count, size=per_frame_patch_count, replace=False) for _ in range(batch_size)])),
+                num_classes=patch_count
+            )
+            patch = (D*patchified_x[:, time_idx, ...].unsqueeze(1)).sum(dim=2)
+            patches.append(patch)
+            hidden_acts = torch.cat(patches + [torch.zeros(batch_size, timestep_count-len(patches), per_frame_patch_count, embedding_dim, dtype=x.dtype, device=x.device)], dim=1)
+            for layer in self.model.transformer_layers:
+                hidden_acts = layer(hidden_acts)
+            _new_class_logits, _ = self.model.head(hidden_acts)
+            new_class_logits = _new_class_logits[:, time_idx, :]
+            losses.append(nn.functional.cross_entropy(new_class_logits, y))
+            accs.append(get_accuracy(new_class_logits, y))
+            avg_loss = sum(losses) / len(losses)
+            final_loss = losses[-1]
+            avg_acc = sum(accs) / len(accs)
+            final_acc = accs[-1]
+            self.log('bl_loss', avg_loss, prog_bar=False, on_step=False, on_epoch=True)
+            self.log('bl_loss_final', final_loss, prog_bar=True, on_step=True)
+            self.log('bl_acc', avg_acc, prog_bar=False, on_step=False, on_epoch=True)
+            self.log('bl_acc_final', final_acc, prog_bar=True, on_step=True, on_epoch=True)
 
     def training_step(self, *args, **kwargs):
         if self.model.config.sparse_inputs:
@@ -127,6 +163,7 @@ class SupervisedVideoModule(lightning.LightningModule):
             return self.standard_training_step(*args, **kwargs)
     
     def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
+        #self.random_sequence_prediction(batch, batch_idx)
         x, y = batch
         logits = self.model(x)
         batch_size, timesteps, class_count = logits.shape

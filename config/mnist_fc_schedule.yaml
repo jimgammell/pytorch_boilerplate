@@ -1,0 +1,43 @@
+nn_arch: causal-vivit
+dataset: lb-mnist
+default_model_config:
+  input_channels: 1
+  input_spatial_dim: 32
+  out_dim: 10
+  max_input_temporal_dim: 8
+  dropout: 0.0
+  patch_dim: 8
+  transformer_head_count: 3
+  transformer_layer_count: 6
+  transformer_hidden_dim: 192
+  transformer_mlp_expansion_ratio: 4
+  include_downsampled_patches: false
+  sparse_inputs: true
+  per_frame_patch_count: 1
+  gumbel_temp: 1.0
+  pretrained_lightning_module_path: /home/jgammell/Desktop/pytorch_boilerplate/outputs/pretrained_mnist_transformer/trainer_output/checkpoints/last.ckpt
+default_training_config:
+  training_steps: 100000
+  base_lr: 1.e-4
+  lr_scheduler_name: cosine_decay
+  lr_scheduler_kwargs:
+    warmup_steps: 1000
+    const_steps: 0
+    warmup_lr_prop: 0.0
+    final_lr_prop: 0.01
+  beta_1: 0.9
+  beta_2: 0.999
+  eps: 1.e-8
+  weight_decay: 0.01
+  grad_clip: 1.0
+  compile: false
+datamodule_config:
+  train_batch_size: 512
+  eval_batch_size: 1024
+  num_workers: 4
+  pin_memory: true
+  persistent_workers: false
+  prefetch_factor: 2
+dataset_config:
+  mnist_dim: 8
+  background_dim: 32

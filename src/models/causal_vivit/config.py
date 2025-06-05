@@ -62,6 +62,7 @@ class Config:
     gumbel_temp: Optional[float] = None
     vit_conf: Optional[Union[str, ViTConf]] = None
     pretrained_model: Optional[Union[str, PretrainedModelURLs]] = None
+    pretrained_lightning_module_path: Optional[str] = None
     patch_selection_gradient_estimator: Literal['reinmax', 'zgr'] = 'reinmax'
 
     def __post_init__(self):
@@ -72,9 +73,12 @@ class Config:
             for key, val in self.vit_conf.value.items():
                 setattr(self, key, val)
         if self.pretrained_model is not None:
+            assert self.pretrained_lightning_module_path is None
             if isinstance(self.pretrained_model, str):
                 assert self.pretrained_model in [x.name for x in PretrainedModelURLs]
                 self.pretrained_model = PretrainedModelURLs[self.pretrained_model]
+        if self.pretrained_lightning_module_path is not None:
+            assert self.pretrained_model is None
         assert isinstance(self.input_channels, int) and (self.input_channels > 0)
         assert isinstance(self.input_spatial_dim, int) and (self.input_spatial_dim > 0)
         assert isinstance(self.patch_dim, int) and (self.patch_dim > 0) and (self.input_spatial_dim % self.patch_dim == 0)

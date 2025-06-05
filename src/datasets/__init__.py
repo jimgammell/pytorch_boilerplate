@@ -15,6 +15,7 @@ class AVAILABLE_DATASETS(Enum):
     IMAGENETTE = 'imagenette'
     OPENWEBTEXT = 'openwebtext'
     JESTER = 'jester'
+    LB_MNIST = 'lb-mnist'
 
 def get_root(dataset_name: AVAILABLE_DATASETS) -> str:
     assert dataset_name in AVAILABLE_DATASETS
@@ -32,6 +33,8 @@ def get_root(dataset_name: AVAILABLE_DATASETS) -> str:
         return ASCADv2_ROOT
     elif dataset_name == AVAILABLE_DATASETS.JESTER:
         return JESTER_ROOT
+    elif dataset_name == AVAILABLE_DATASETS.LB_MNIST:
+        return os.path.join(RESOURCE_DIR, 'mnist')
     else:
         return os.path.join(RESOURCE_DIR, dataset_name.value)
 
@@ -64,10 +67,16 @@ def load(dataset_name: Union[str, AVAILABLE_DATASETS], **kwargs) -> Tuple[Datase
         test_dataset = None
     elif dataset_name == AVAILABLE_DATASETS.JESTER:
         from .jester import Jester, JesterDataModule
-        train_dataset = Jester(JESTER_ROOT, split='train', **kwargs)
-        val_dataset = Jester(JESTER_ROOT, split='validation', **kwargs)
-        test_dataset = Jester(JESTER_ROOT, split='test', **kwargs)
+        train_dataset = Jester(root, split='train', **kwargs)
+        val_dataset = Jester(root, split='validation', **kwargs)
+        test_dataset = Jester(root, split='test', **kwargs)
         return train_dataset, val_dataset, test_dataset, JesterDataModule
+    elif dataset_name == AVAILABLE_DATASETS.LB_MNIST:
+        from .large_backdrop_mnist import LargeBackdropMNIST
+        from .jester import JesterDataModule
+        train_dataset = LargeBackdropMNIST(root, stage='train', **kwargs)
+        val_dataset = LargeBackdropMNIST(root, stage='test', **kwargs)
+        return train_dataset, val_dataset, None, JesterDataModule
     else:
         assert False
     return train_dataset, test_dataset

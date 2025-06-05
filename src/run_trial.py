@@ -9,7 +9,12 @@ import models
 from training_modules.supervised_classification import SupervisedClassificationTrainer
 from training_modules.sequential_image_classifier import SequentialImageClassifierTrainer
 from training_modules.supervised_video import SupervisedVideoTrainer
+from experiments.text_generation import TextGenerationTrial, TextGenerationConfig
 from utils.flatten_dict import *
+
+def eval_llm_sampling_procedures(config: TextGenerationConfig, output_dir: str):
+    trial = TextGenerationTrial(output_dir, config)
+    trial(run_generate_autoregressive_samples=True)
 
 def train_supervised_classifier(args, default_training_config_kwargs, default_model_config_kwargs, datamodule_config_kwargs, dataset_kwargs=None):
     dataset_kwargs = dataset_kwargs or {}
@@ -166,8 +171,14 @@ def main():
         datamodule_config_kwargs['timestep_count'] = timesteps
         dataset_kwargs['timesteps'] = timesteps
         train_video_discriminative_model(args, config['nn_arch'], config['dataset'], default_training_config_kwargs, default_model_config_kwargs, datamodule_config_kwargs, dataset_kwargs)
-    elif args.action  == 'compute-parametric-stats':
-        compute_parametric_stats(args)
+    elif args.action  == 'text_generation_trial':
+        config_name = args.config_file
+        output_dir = os.path.join(OUTPUT_DIR, f'{config_name}')
+        config_path = os.path.join(CONFIG_DIR, f'{config_name}.yaml')
+        with open(config_path, 'r') as f:
+            config_kwargs = yaml.load(f, Loader=yaml.FullLoader)
+        config = TextGenerationConfig(**config_kwargs)
+        eval_llm_sampling_procedures(config, output_dir)
     else:
         assert False
 

@@ -61,6 +61,7 @@ class PatchSelector(BaseModule):
     def __init__(self, config: Config):
         self.config = config
         self.per_frame_patch_count = self.config.per_frame_patch_count if isinstance(self.config.per_frame_patch_count, int) else self.config.per_frame_patch_count[0]
+        self.tau = self.config.gumbel_temp
         super().__init__()
     
     def construct(self):
@@ -69,6 +70,7 @@ class PatchSelector(BaseModule):
     def init_weights(self):
         nn.init.trunc_normal_(self.prior_logits, mean=0., std=0.02)
     
+    @torch._dynamo.disable
     def forward(self, patchified_frame: torch.Tensor, patch_logits: Optional[torch.Tensor] = None) -> torch.Tensor:
         batch_size, patch_count, embedding_dim = patchified_frame.shape
         if patch_logits is None:
@@ -76,9 +78,9 @@ class PatchSelector(BaseModule):
         dist = []
         # Implementation of ReinMax: https://proceedings.neurips.cc/paper_files/paper/2023/file/28b5dfc51e5ae12d84fb7c6172a00df4-Paper-Conference.pdf
         for idx in range(self.per_frame_patch_count):
-            if self.config.patch_selection_gradient_estimator == 'reinmax':
+            if False: # self.config.patch_selection_gradient_estimator == 'reinmax':
                 D, _ = reinmax(patch_logits, self.config.gumbel_temp)
-            elif self.config.patch_selection_gradient_estimator == 'zgr': # adapted from https://github.com/shekhovt/ZGR/blob/main/zgr.py
+            elif True: # self.config.patch_selection_gradient_estimator == 'zgr': # adapted from https://github.com/shekhovt/ZGR/blob/main/zgr.py
                 logp = patch_logits - torch.logsumexp(patch_logits, dim=-1, keepdim=True)
                 p = logp.exp()
                 dx_ST = p
@@ -89,6 +91,7 @@ class PatchSelector(BaseModule):
                 dx_RE = (y - p.detach()) * logpx
                 dx = (dx_ST + dx_RE)/2
                 D = y + (dx - dx.detach())
+            #D = nn.functional.gumbel_softmax(patch_logits, tau=self.tau, hard=not self.training)
             dist.append(D)
             patch_logits = patch_logits.masked_fill(nn.functional.one_hot(D.argmax(dim=-1), num_classes=patch_count).bool(), -1e12)
         dist = torch.stack(dist, dim=1)
@@ -197,10 +200,11 @@ class Attention(BaseModule):
             k = self.rope.rotate_queries_or_keys(k)
         if self.attn_mask is not None:
             attn_mask = self.attn_mask.view(1, 1, eff_seq_len, eff_seq_len).expand(batch_size, -1, -1, -1)
+            kwargs = {'attn_mask': attn_mask, 'dropout_p': self.config.dropout if self.training else 0., 'is_causal': self.mode=='temporal'}
         else:
-            attn_mask = None
+            kwargs = {'dropout_p': self.config.dropout if self.training else 0., 'is_causal': self.mode=='temporal'}
         pre_out = (
-            nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=self.config.dropout if self.training else 0., is_causal=self.mode=='temporal')
+            nn.functional.scaled_dot_product_attention(q, k, v, **kwargs)
             .permute(0, 2, 1, 3)
             .contiguous()
             .view(eff_batch_size, eff_seq_len, embedding_dim)
