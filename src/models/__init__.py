@@ -7,6 +7,7 @@ class AVAILABLE_MODELS(Enum):
     TRANSFORMER_FOR_SCA = 'transformer-for-sca'
     SEQUENTIAL_TRANSFORMER = 'sequential-transformer'
     CAUSAL_VIVIT = 'causal-vivit'
+    ARLM = 'arlm'
 
 def load(model_name: Union[str, AVAILABLE_MODELS], config_kwargs: Dict[str, Any]) -> BaseModule:
     if isinstance(model_name, str):
@@ -31,6 +32,10 @@ def load(model_name: Union[str, AVAILABLE_MODELS], config_kwargs: Dict[str, Any]
         else:
             from .causal_vivit import Transformer
             model = Transformer(config)
+    elif model_name == AVAILABLE_MODELS.ARLM:
+        from .autoregressive_diffusion import ARM, ARMConfig
+        config = ARMConfig(**config_kwargs)
+        model = ARM(config)
     else:
         assert False
     return model

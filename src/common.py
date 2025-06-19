@@ -3,6 +3,7 @@ import os
 import socket
 import yaml
 import sys
+import importlib
 import logging
 
 import torch
@@ -42,6 +43,16 @@ def get_worker_count() -> int:
     assert worker_count is not None
     worker_count = 3*worker_count//4
     return worker_count
+
+def get_huggingface_module(module_name): # necessary because apparently the HuggingFace libraries are just named e.g. 'datasets' instead of 'huggingface.datasets'
+    local_path = os.path.abspath(os.path.join(SRC_DIR, module_name))
+    orig_path = sys.path.copy()
+    sys.path = [p for p in sys.path if os.path.abspath(p) != local_path]
+    try:
+        module = importlib.import_module(module_name)
+    finally:
+        sys.path = orig_path
+    return module
 
 if torch.cuda.is_available():
     torch.backends.cudnn.benchmark = True

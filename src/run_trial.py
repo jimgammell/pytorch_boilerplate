@@ -14,7 +14,7 @@ from utils.flatten_dict import *
 
 def eval_llm_sampling_procedures(config: TextGenerationConfig, output_dir: str):
     trial = TextGenerationTrial(output_dir, config)
-    trial(run_generate_autoregressive_samples=True)
+    trial(run_generate_autoregressive_samples=False, run_generate_ode_samples=True)
 
 def train_supervised_classifier(args, default_training_config_kwargs, default_model_config_kwargs, datamodule_config_kwargs, dataset_kwargs=None):
     dataset_kwargs = dataset_kwargs or {}
